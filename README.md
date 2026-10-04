@@ -8,6 +8,8 @@ Bilingual interface (**English / Русский**) with a language switch on eve
 
 > Русская версия: [README.ru.md](README.ru.md)
 
+> **New to this?** Step-by-step guide with examples for beginners: [GUIDE.md](GUIDE.md).
+
 > **Disclaimer.** Independent community project, not affiliated with Hysteria, sing-box, mihomo or Clash.
 > You are responsible for using it in compliance with the laws that apply to you and to your servers.
 
@@ -54,6 +56,32 @@ and restarts the service only when something changed.
 - Python 3.10+ (tested on 3.12; the installer pulls `python3-venv`).
 - One or more VPS with Debian/Ubuntu, reachable over SSH as `root` (or a sudo user with passwordless sudo).
   A supported (not end-of-life) OS release is strongly recommended.
+
+## No domain of your own? Get a free one (freedns.afraid.org)
+
+HTTPS needs a domain name. If you do not own one, you can get a free subdomain from [FreeDNS](https://freedns.afraid.org):
+
+1. Register at <https://freedns.afraid.org/signup/> and confirm the e-mail they send you.
+2. Open **Subdomains → Add**. Choose:
+   - **Type: `A`** (IPv4) — or `AAAA` for IPv6;
+   - **Subdomain:** any free name, e.g. `myhelm`;
+   - **Domain:** pick one from the list (e.g. `mooo.com`, `us.to` …; the list is long, availability changes);
+   - **Destination:** the **public IP** of the machine you point the name at (see below);
+   - Fill in the captcha and **Save**.
+3. Wait a few minutes and check: `nslookup myhelm.mooo.com` (or `ping myhelm.mooo.com`) must show your IP.
+4. Use the result (`myhelm.mooo.com`) wherever this README says "your domain".
+
+Which IP goes where:
+
+- **Panel host** (the machine running nginx + SolaHelm): the public IP of your router/server; forward TCP 80 and 443
+  from the router to that machine. Get the certificate with `sudo certbot --nginx -d myhelm.mooo.com`.
+- **Each VPS with Hysteria2** (needed for the ACME certificate, see "Adding a VPS"): create one more `A` record
+  with the VPS IP, e.g. `vps1.mooo.com`.
+- **Home IP changes?** In FreeDNS open **Dynamic DNS**, copy the *Direct URL* of your record and call it
+  periodically, e.g. from cron: `*/10 * * * * curl -s "<your direct URL>" >/dev/null`.
+
+Notes: free accounts have a limit on the number of subdomains; if the free domain is later removed from the list or
+the record is idle for long, it may stop working — keep an eye on FreeDNS e-mails. A domain you own is more reliable.
 
 ## Quick start (Linux / WSL)
 
@@ -165,3 +193,9 @@ The bundled routing preset references public rule sets from
 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat); they are downloaded by clients at runtime.
 
 SolaHelm itself is released under the [MIT License](LICENSE).
+
+## Made with Claude
+
+Everything in this project — the code, the installer, the documentation — was created with the help of **Claude**,
+the AI assistant by **Anthropic**, working as a coding agent (Claude Code). Many thanks to Anthropic for building it
+and making this kind of work possible. Review the code and the security notes before using it in production.
