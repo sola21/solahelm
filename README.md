@@ -13,6 +13,14 @@ Bilingual interface (**English / Русский**) with a language switch on eve
 > **Disclaimer.** Independent community project, not affiliated with Hysteria, sing-box, mihomo or Clash.
 > You are responsible for using it in compliance with the laws that apply to you and to your servers.
 
+## Screenshots
+
+![Overview: state, load and availability of every server](docs/screenshots/overview.en.png)
+
+![Servers: Hysteria2 / VLESS / AnyTLS on each VPS](docs/screenshots/servers.en.png)
+
+*Demo data: IP addresses and host names are replaced with documentation examples.*
+
 ## Features
 
 - **Many VPS from one panel.** Add servers by SSH (panel key, password or your own key), see service state, version,
