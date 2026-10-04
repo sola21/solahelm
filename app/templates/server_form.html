@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Редактирование' if s else 'Новый сервер' }} · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head"><h1>{{ 'Сервер: ' ~ s.name if s else 'Новый VPS-сервер' }}</h1></div>
+{% if errors %}<div class="flash err">{% for e in errors %}{{ e }}<br>{% endfor %}</div>{% endif %}
+{% set f = form %}
+<form method="post" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <fieldset>
+    <legend>Основное</legend>
+    <div class="row">
+      <label>Название<input name="name" value="{{ f.name or '' }}" required maxlength="60" placeholder="NL-Amsterdam"></label>
+      <label>IP / хост для SSH<input name="host" value="{{ f.host or '' }}" required placeholder="203.0.113.10"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if f.enabled in (1,'1') }}> Сервер включён (опрос, синхронизация, подписки)</label>
+    <label class="check"><input type="checkbox" name="auto_assign" value="1" {{ 'checked' if f.auto_assign in (1,'1') }}> Предлагать этот сервер новым профилям по умолчанию (в форме создания профиля он будет отмечен)</label>
+    {% if not s %}<label class="check"><input type="checkbox" name="assign_all" value="1"> Сразу привязать к серверу все существующие профили</label>{% endif %}
+    <label>Заметки<textarea name="notes" rows="2">{{ f.notes or '' }}</textarea></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>SSH-доступ</legend>
+    <div class="row">
+      <label>Порт SSH<input name="ssh_port" type="number" min="1" max="65535" value="{{ f.ssh_port or 22 }}"></label>
+      <label>Пользователь<input name="ssh_user" value="{{ f.ssh_user or 'root' }}"><small>не root — нужен sudo без пароля</small></label>
+      <label>Способ входа
+        <select name="ssh_auth" data-toggle-auth>
+          {% set a = f.ssh_auth or 'panelkey' %}
+          <option value="panelkey" {{ 'selected' if a=='panelkey' }}>Ключ панели (рекомендуется)</option>
+          <option value="password" {{ 'selected' if a=='password' }}>Пароль</option>
+          <option value="key" {{ 'selected' if a=='key' }}>Свой приватный ключ</option>
+        </select>
+      </label>
+    </div>
+    <div data-auth="panelkey" class="hint">
+      Добавьте публичный ключ панели в <code>~/.ssh/authorized_keys</code> на VPS:
+      <div class="copyline"><code id="pk">{{ pubkey }}</code><button type="button" class="btn sm" data-copy="#pk">Копировать</button></div>
+      Или выберите «Пароль», сохраните сервер и нажмите на его странице «Установить ключ панели»: ключ будет добавлен автоматически, пароль удалится из панели.
+    </div>
+    <div data-auth="password">
+      <label>SSH-пароль<input name="ssh_password" type="password" autocomplete="new-password" placeholder="{{ 'оставьте пустым, чтобы не менять' if s and s.ssh_auth=='password' }}"></label>
+    </div>
+    <div data-auth="key">
+      <label>Приватный ключ (OpenSSH/PEM)<textarea name="ssh_key" rows="5" class="mono" placeholder="{{ 'оставьте пустым, чтобы не менять' if s and s.ssh_auth=='key' else '-----BEGIN OPENSSH PRIVATE KEY-----' }}"></textarea></label>
+      <label>Passphrase ключа (если есть)<input name="ssh_key_pass" type="password" autocomplete="new-password"></label>
+    </div>
+    <small class="muted">Секреты хранятся зашифрованными (data/secret.key).</small>
+  </fieldset>
+
+  <fieldset>
+    <legend>Hysteria2 на сервере</legend>
+    <label class="check"><input type="checkbox" name="hy2_enabled" value="1" {{ 'checked' if f.hy2_enabled in (1,'1') }}> Hysteria2 используется на этом сервере (снимите, если там только sing-box)</label>
+    <div class="row">
+      <label>Путь к конфигу<input name="config_path" value="{{ f.config_path or '/etc/hysteria/config.yaml' }}"></label>
+      <label>Служба systemd<input name="service" value="{{ f.service or 'hysteria-server.service' }}"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="manage_stats" value="1" {{ 'checked' if f.manage_stats in (1,'1') }}> Включать trafficStats API (онлайн, трафик, отключение пользователей) на 127.0.0.1</label>
+    <div class="row">
+      <label>Порт trafficStats<input name="stats_port" type="number" value="{{ f.stats_port or 25413 }}"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>sing-box (VLESS / AnyTLS)</legend>
+    <p class="muted small">Протоколы, порты и домены настраиваются на странице сервера в блоке «sing-box». Здесь только расположение файлов.</p>
+    <div class="row">
+      <label>Путь к конфигу<input name="sb_config_path" value="{{ f.sb_config_path or '/etc/sing-box/config.json' }}"></label>
+      <label>Служба systemd<input name="sb_service" value="{{ f.sb_service or 'sing-box.service' }}"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Параметры для клиентских ссылок Hysteria2</legend>
+    <p class="muted small">Если пусто — берутся из config.yaml (домен из acme.domains и порт из listen).</p>
+    <div class="row">
+      <label>Публичный домен/IP<input name="public_host" value="{{ f.public_host or '' }}" placeholder="vpn.example.com"></label>
+      <label>Публичный порт<input name="public_port" type="number" min="0" max="65535" value="{{ f.public_port or '' }}" placeholder="443"></label>
+      <label>SNI<input name="sni" value="{{ f.sni or '' }}"></label>
+    </div>
+    <div class="row">
+      <label>Port hopping<input name="hop_ports" value="{{ f.hop_ports or '' }}" placeholder="443,20000-30000"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="insecure" value="1" {{ 'checked' if f.insecure in (1,'1') }}> insecure (самоподписанный сертификат)</label>
+  </fieldset>
+
+  <div class="actions">
+    <button class="btn primary">{{ 'Сохранить' if s else 'Добавить сервер' }}</button>
+    <a class="btn ghost" href="{{ base }}/servers{{ '/' ~ s.id if s }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import svc_badge, bar, sync_badge, uptime_strip %}
+{% block content %}
+<div class="head">
+  <h1>Обзор</h1>
+  <div class="actions">
+    <button class="btn" data-api="/api/poll-all" data-reload="3000">Опросить все серверы</button>
+    <a class="btn primary" href="{{ base }}/users/new">+ Профиль</a>
+  </div>
+</div>
+
+<div class="tiles">
+  <div class="tile"><span>Серверы в работе</span><b>{{ stats.servers_up }}<small> / {{ stats.servers }}</small></b></div>
+  <div class="tile"><span>Активные профили</span><b>{{ stats.users_active }}<small> / {{ stats.users }}</small></b></div>
+  <div class="tile"><span>Подключений сейчас</span><b>{{ stats.online }}</b></div>
+  <div class="tile"><span>Трафик за всё время</span><b>{{ stats.traffic|bytes }}</b></div>
+</div>
+
+<h2>Серверы</h2>
+{% if not servers %}
+<div class="card empty">Серверов пока нет. <a href="{{ base }}/servers/new">Добавить первый VPS</a></div>
+{% endif %}
+<div class="grid">
+{% for s in servers %}{% set st = s.st %}
+  <a class="card srv" href="{{ base }}/servers/{{ s.id }}">
+    <div class="srv-head"><b>{{ s.name }}</b>{{ svc_badge(st) }}{{ sync_badge(s) }}{% if not s.enabled %}<span class="badge">выключен в панели</span>{% endif %}</div>
+    <div class="muted small">{{ s.host }} · {{ st.version or 'hysteria ?' }}</div>
+    {% if st.down %}<div class="small err-text">{{ st.error|truncate(120) }}</div>{% endif %}
+    {{ uptime_strip(s.hist) }}
+    <div class="small muted">За 24 ч: {{ (s.hist.uptime|string ~ '%') if s.hist.uptime is not none else 'нет данных' }}{% if s.hist.avg_ms %} · ответ ≈ {{ s.hist.avg_ms }} мс{% endif %}</div>
+    <dl class="kv">
+      <dt>Онлайн</dt><dd>{{ st.online_total or 0 }} подкл. · {{ s.users_count }} проф.</dd>
+      <dt>Аптайм</dt><dd>{{ st.uptime|dur if st.uptime else '—' }}</dd>
+      <dt>Нагрузка</dt><dd>{{ st.load or '—' }}{% if st.cpus %} ({{ st.cpus }} CPU){% endif %}</dd>
+      <dt>Сеть</dt><dd>{% if st.rate_rx is defined %}↓ {{ (st.rate_rx*8/1000000)|round(2) }} Мбит/с · ↑ {{ (st.rate_tx*8/1000000)|round(2) }} Мбит/с{% else %}—{% endif %}</dd>
+    </dl>
+    {% if st.mem_total %}<div class="small muted">RAM {{ st.mem_used|bytes }} / {{ st.mem_total|bytes }}</div>{{ bar(st.mem_used, st.mem_total) }}{% endif %}
+    {% if st.disk_total %}<div class="small muted">Диск {{ st.disk_used|bytes }} / {{ st.disk_total|bytes }}</div>{{ bar(st.disk_used, st.disk_total) }}{% endif %}
+    <div class="small muted">Проверен: {{ (st.checked or st.ts)|ago if (st.checked or st.ts) else 'никогда' }}</div>
+  </a>
+{% endfor %}
+</div>
+
+<div class="cols">
+  <section>
+    <h2>Топ по трафику</h2>
+    <table class="tbl">
+      <tr><th>Профиль</th><th class="r">Трафик</th><th class="r">Лимит</th></tr>
+      {% for u in top %}
+      <tr><td><a href="{{ base }}/users/{{ u.id }}">{{ u.username }}</a></td><td class="r">{{ (u.tx+u.rx)|bytes }}</td><td class="r">{{ u.traffic_limit|bytes if u.traffic_limit else '∞' }}</td></tr>
+      {% else %}<tr><td colspan="3" class="muted">Нет данных</td></tr>{% endfor %}
+    </table>
+  </section>
+  <section>
+    <h2>Последние задачи</h2>
+    <table class="tbl">
+      <tr><th>Задача</th><th>Сервер</th><th>Статус</th></tr>
+      {% for j in jobs %}
+      <tr><td><a href="{{ base }}/jobs/{{ j.id }}">#{{ j.id }} {{ j.kind }}</a></td><td>{{ j.server_name or '—' }}</td><td><span class="badge {{ {'ok':'ok','error':'err','running':'warn'}.get(j.status,'') }}">{{ j.status }}</span></td></tr>
+      {% else %}<tr><td colspan="3" class="muted">Задач не было</td></tr>{% endfor %}
+    </table>
+  </section>
+</div>
+{% endblock %}

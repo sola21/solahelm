@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Вход · {{ brand }}{% endblock %}
+{% block content %}
+<div class="login">
+  <form method="post" action="{{ base }}/login" class="card">
+    <div class="login-head"><img src="{{ static }}/favicon.svg" alt=""><h1>{{ brand }}</h1></div>
+    {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+    {% if no_admins %}<div class="flash warn">Администратор ещё не создан. На сервере выполните:<br><code>python manage.py create-admin admin</code></div>{% endif %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Логин<input name="username" autocomplete="username" required autofocus></label>
+    <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary wide">Войти</button>
+  </form>
+</div>
+{% endblock %}

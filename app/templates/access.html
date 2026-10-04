@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_macros.html" import proto_badges %}
+{% block title %}Доступ · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Доступ профилей к серверам</h1>
+  <div class="actions"><input id="accessfilter" class="filter" placeholder="Фильтр по логину" autocomplete="off"></div>
+</div>
+<div class="hint">
+  Отметьте, к каким серверам у профиля есть доступ. Клиент видит ссылки, QR и подписку <b>только по отмеченным серверам</b>.
+  Переключатели сохраняются сразу: панель сама обновит конфиги затронутых серверов (на них пользователь добавится или удалится).
+  Что отмечать у новых профилей по умолчанию, настраивается в настройках сервера («Предлагать новым профилям»).
+</div>
+
+{% if not servers %}
+<div class="card empty">Серверов пока нет. <a href="{{ base }}/servers/new">Добавить сервер</a></div>
+{% elif not users %}
+<div class="card empty">Профилей пока нет. <a href="{{ base }}/users/new">Создать профиль</a></div>
+{% else %}
+<div class="card flush matrix-wrap">
+<table class="tbl matrix" id="access">
+  <thead>
+    <tr>
+      <th class="sticky">Профиль</th>
+      {% for s in servers %}
+      <th class="c">
+        <a href="{{ base }}/servers/{{ s.id }}"><b>{{ s.name }}</b></a>{% if not s.enabled %} <span class="badge">выкл</span>{% endif %}
+        <div>{{ proto_badges(s) }}</div>
+        {% if s.sync_error %}<span class="badge err" title="{{ s.sync_error }}">ошибка синхр.</span>{% elif s.dirty %}<span class="badge warn">синхр…</span>{% endif %}
+        <div class="bulk"><button type="button" class="linkbtn" data-bulk="col:{{ s.id }}" data-on="1" title="Дать доступ всем профилям">все</button> · <button type="button" class="linkbtn" data-bulk="col:{{ s.id }}" data-on="0" title="Снять доступ у всех профилей">никто</button></div>
+      </th>
+      {% endfor %}
+      <th class="c">Серверов</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr data-name="{{ u.username }}">
+      <td class="sticky">
+        <a href="{{ base }}/users/{{ u.id }}"><b>{{ u.username }}</b></a>{% if not u.enabled %} <span class="badge">выкл</span>{% endif %}
+        {% if u.owner %}<span class="muted small">· {{ u.owner }}</span>{% endif %}
+        <div class="bulk"><button type="button" class="linkbtn" data-bulk="row:{{ u.id }}" data-on="1">все</button> · <button type="button" class="linkbtn" data-bulk="row:{{ u.id }}" data-on="0">ни одного</button></div>
+      </td>
+      {% for s in servers %}
+      <td class="c"><input type="checkbox" data-u="{{ u.id }}" data-s="{{ s.id }}" {{ 'checked' if (u.id ~ ':' ~ s.id) in linked }} aria-label="{{ u.username }} → {{ s.name }}"></td>
+      {% endfor %}
+      <td class="c cnt">0</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small">Профиль без серверов получает пустую подписку. В списке профилей такие помечены «нет серверов».</p>
+{% endif %}
+{% endblock %}

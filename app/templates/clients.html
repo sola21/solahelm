@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Клиенты · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Клиенты <span class="muted">({{ clients|length }})</span></h1>
+  <div class="actions"><a class="btn primary" href="{{ base }}/clients/new">+ Новый клиент</a></div>
+</div>
+<div class="hint">
+  Клиент — учётная запись личного кабинета. Он входит по своему логину и паролю и видит только свои профили:
+  ссылки, QR, подписку, файлы YAML, срок и остаток трафика.
+  <div class="copyline"><code id="portal">{{ portal }}</code><button class="btn sm" data-copy="#portal">Копировать адрес кабинета</button></div>
+  {% if orphans %}<span class="muted small">Профилей без владельца: {{ orphans }}.</span>{% endif %}
+</div>
+<div class="card flush">
+<table class="tbl">
+  <tr><th>Логин</th><th>Имя</th><th>Статус</th><th>Профили</th><th>Последний вход</th><th>Заметка</th></tr>
+  {% for c in clients %}
+  <tr>
+    <td><a href="{{ base }}/clients/{{ c.id }}"><b>{{ c.login }}</b></a></td>
+    <td>{{ c.name }}</td>
+    <td>{% if c.enabled %}<span class="badge ok">вход разрешён</span>{% else %}<span class="badge">заблокирован</span>{% endif %}</td>
+    <td class="small">{{ c.profiles_count }}{% if c.profiles %}: <span class="muted">{{ c.profiles|truncate(60) }}</span>{% endif %}</td>
+    <td class="small">{{ c.last_login|ago }}</td>
+    <td class="small muted">{{ c.note|truncate(40) }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">Клиентов пока нет</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

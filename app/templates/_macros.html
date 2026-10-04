@@ -1,0 +1,50 @@
+{% macro svc_badge(st) -%}
+{% if st.down %}<span class="badge err" title="{{ st.error }}">нет связи</span>
+{% elif st.active == 'active' %}<span class="badge ok">работает</span>
+{% elif st.active %}<span class="badge err">{{ st.active }}</span>
+{% else %}<span class="badge">не проверен</span>{% endif %}
+{%- endmacro %}
+
+{# полоса доступности: по клетке на интервал времени #}
+{% macro uptime_strip(h, big=false) -%}
+<div class="strip{{ ' big' if big }}">{% for b in h.buckets %}<i class="st-{{ b.state }}" title="{{ b.t|ts }}{% if b.total %} · доступность {{ (100 * b.ok / b.total)|round(0)|int }}%{% if b.ms %} · {{ b.ms }} мс{% endif %}{% else %} · нет данных{% endif %}"></i>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro user_badge(u) -%}
+{% set s = user_state(u) %}<span class="badge {{ {'on':'ok','off':'','expired':'err','limit':'warn'}[s[0]] }}">{{ s[1] }}</span>
+{%- endmacro %}
+
+{% macro bar(used, total) -%}
+{% set p = pct(used, total) %}<div class="bar{{ ' hot' if p >= 85 }}"><i style="width:{{ p if p <= 100 else 100 }}%"></i></div>
+{%- endmacro %}
+
+{# Ссылки, QR и файлы для одного профиля на одном сервере: по блоку на каждый протокол.
+   area: 'admin' (страница профиля) или 'my' (кабинет клиента) #}
+{% macro conn_links(links, uid, sid, area) -%}
+<div class="protos">
+{% for l in links %}
+  {% set eid = 'l' ~ uid ~ '_' ~ sid ~ '_' ~ l.proto %}
+  <div class="proto">
+    <div class="proto-head"><span class="badge {{ {'hy2':'','vless':'ok','anytls':'warn'}[l.proto] }}">{{ l.label }}</span></div>
+    <div class="qrwrap">{{ l.qr|safe }}</div>
+    <div class="copyline"><code id="{{ eid }}" class="wrapcode">{{ l.uri }}</code></div>
+    <div class="btns">
+      <button class="btn sm primary" data-copy="#{{ eid }}">Копировать ссылку</button>
+      <a class="btn sm" href="{{ (base ~ '/users/%d/qr/%d.png'|format(uid, sid)) if area == 'admin' else (pub ~ '/qr/%d/%d.png'|format(uid, sid)) }}?p={{ l.proto }}" download>QR PNG</a>
+      {% if l.proto == 'hy2' %}<a class="btn sm" href="{{ (base ~ '/users/%d/hysteria/%d.yaml'|format(uid, sid)) if area == 'admin' else (pub ~ '/hysteria/%d/%d.yaml'|format(uid, sid)) }}">YAML</a>{% endif %}
+    </div>
+  </div>
+{% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro proto_badges(s) -%}
+{% if s.hy2_enabled %}<span class="badge">Hy2</span>{% endif %}
+{% if s.vless_enabled %}<span class="badge ok">VLESS</span>{% endif %}
+{% if s.anytls_enabled %}<span class="badge warn">AnyTLS</span>{% endif %}
+{%- endmacro %}
+
+{% macro sync_badge(s) -%}
+{% if s.sync_error %}<span class="badge err" title="{{ s.sync_error }}">ошибка синхр.</span>
+{% elif s.dirty %}<span class="badge warn">ожидает синхр.</span>{% endif %}
+{%- endmacro %}

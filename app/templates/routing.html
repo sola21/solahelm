@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Правила · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Правила маршрутизации</h1>
+  <div class="actions"><a class="btn primary" href="{{ base }}/routing/new">+ Загрузить / создать шаблон</a></div>
+</div>
+<div class="hint">
+  Шаблон определяет, что клиент пускает <b>напрямую</b>, а что <b>через VPN</b>, плюс DNS, TUN и sniffer.
+  Он применяется к <b>Clash-конфигу</b> профиля (Clash Verge, FlClash, Mihomo Party, Clash Meta для Android): и к скачиваемому файлу,
+  и к ссылке подписки <code>…/clash</code>. Ссылки <code>hysteria2://</code>, <code>vless://</code> и <code>anytls://</code> правил не содержат.
+  Серверы и протоколы профиля панель подставляет сама в место <code>"@proxies"</code>.
+</div>
+
+<form method="post" action="{{ base }}/routing/default" class="card form inline-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>Шаблон по умолчанию (для профилей без своего)
+    <select name="template_id">
+      <option value="">— не применять (простой встроенный конфиг) —</option>
+      {% for t in templates_ %}<option value="{{ t.id }}" {{ 'selected' if t.is_default }}>{{ t.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn primary">Применить</button>
+</form>
+
+<div class="card flush">
+<table class="tbl">
+  <tr><th>Название</th><th class="r">Правил</th><th class="r">Наборов</th><th>DNS / TUN</th><th class="r">Профилей</th><th>Изменён</th></tr>
+  {% for t in templates_ %}
+  <tr>
+    <td><a href="{{ base }}/routing/{{ t.id }}"><b>{{ t.name }}</b></a>{% if t.is_default %} <span class="badge ok">по умолчанию</span>{% endif %}
+      {% if t.info and t.info.notes %}<span class="badge warn" title="{{ t.info.notes|join(' · ') }}">замечаний: {{ t.info.notes|length }}</span>{% endif %}
+      {% if not t.info %}<span class="badge err">ошибка YAML</span>{% endif %}</td>
+    <td class="r">{{ t.info.rules if t.info else '—' }}</td>
+    <td class="r">{{ t.info.providers if t.info else '—' }}</td>
+    <td class="small">{% if t.info %}{{ 'DNS' if t.info.dns }}{{ ' · ' if t.info.dns and t.info.tun }}{{ 'TUN' if t.info.tun }}{% endif %}</td>
+    <td class="r">{{ t.used }}</td>
+    <td class="small">{{ t.updated|ts }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">Шаблонов нет</td></tr>
+  {% endfor %}
+</table>
+</div>
+<p class="muted small">Профилей без своего шаблона: {{ no_default_users }}. Свой шаблон выбирается в форме профиля.</p>
+{% endblock %}

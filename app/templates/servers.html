@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_macros.html" import svc_badge, sync_badge, proto_badges %}
+{% block title %}Серверы · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Серверы</h1>
+  <div class="actions"><a class="btn primary" href="{{ base }}/servers/new">+ Добавить VPS</a></div>
+</div>
+<div class="card flush">
+<table class="tbl">
+  <tr><th>Название</th><th>Адрес</th><th>Состояние</th><th class="r">Профили</th><th class="r">Онлайн</th><th>Версия</th><th>Синхронизация</th></tr>
+  {% for s in servers %}
+  <tr>
+    <td><a href="{{ base }}/servers/{{ s.id }}"><b>{{ s.name }}</b></a>{% if not s.enabled %} <span class="badge">выкл</span>{% endif %}<br>{{ proto_badges(s) }}</td>
+    <td class="mono small">{{ s.host }}{% if s.info.domains %}<br><span class="muted">{{ s.info.domains|join(', ') }}</span>{% endif %}</td>
+    <td>{{ svc_badge(s.st) }}</td>
+    <td class="r">{{ s.users_count }}</td>
+    <td class="r">{{ s.st.online_total or 0 }}</td>
+    <td class="small">{{ s.st.version or '—' }}</td>
+    <td>{{ sync_badge(s) }}{% if not s.sync_error and not s.dirty %}<span class="small muted">{{ s.last_sync|ago if s.last_sync else '—' }}</span>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="muted">Серверов пока нет</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

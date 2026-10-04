@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Шаблон ' ~ t.name if t else 'Новый шаблон' }} · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>{{ 'Шаблон: ' ~ t.name if t else 'Новый шаблон правил' }} {% if is_default %}<span class="badge ok">по умолчанию</span>{% endif %}</h1>
+  {% if t %}
+  <div class="actions">
+    <button class="btn" data-preview="/api/routing/{{ t.id }}/preview">Предпросмотр конфига</button>
+    <form method="post" action="{{ base }}/routing/{{ t.id }}/delete" data-confirm="Удалить шаблон {{ t.name }}? Профили с ним перейдут на шаблон по умолчанию.">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn danger">Удалить</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% if errors %}<div class="flash err">{% for e in errors %}{{ e }}<br>{% endfor %}</div>{% endif %}
+{% if notes %}<div class="flash warn"><b>Замечания:</b><br>{% for n in notes %}• {{ n }}<br>{% endfor %}</div>{% endif %}
+
+<form method="post" action="{{ base }}/routing/{{ (t.id ~ '/edit') if t else 'new' }}" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>Название<input name="name" value="{{ form.name or '' }}" required maxlength="80" placeholder="РФ напрямую"></label>
+  <div class="hint small">
+    Вставьте готовый клиентский YAML (например, сделанный в конфигураторе mihomo) или загрузите файл. Из него берутся DNS, TUN, sniffer, наборы правил,
+    правила и группы. Секция <code>proxies</code> удаляется: серверы подставит панель. В группах на месте серверов будет
+    <code>"@proxies"</code>. Ссылки на GitHub вида <code>…/blob/…</code> автоматически заменяются на <code>…/raw/…</code>.
+  </div>
+  <div class="btns">
+    <label class="btn sm">Загрузить файл…<input type="file" id="tplfile" accept=".yaml,.yml,.txt" hidden></label>
+  </div>
+  <label>YAML<textarea name="yaml" id="tpltext" rows="26" class="mono code" spellcheck="false" required>{{ form.yaml or '' }}</textarea></label>
+  {% if info %}<p class="small muted">Правил: {{ info.rules }} · наборов: {{ info.providers }} · групп: {{ info.groups }}{{ ' · DNS' if info.dns }}{{ ' · TUN' if info.tun }}</p>{% endif %}
+  <div class="actions">
+    <button class="btn primary">{{ 'Сохранить' if t else 'Добавить шаблон' }}</button>
+    <a class="btn ghost" href="{{ base }}/routing">К списку</a>
+  </div>
+</form>
+
+{% if t and used %}
+<section class="card"><h3>Назначен профилям</h3>
+  {% for u in used %}<a href="{{ base }}/users/{{ u.id }}">{{ u.username }}</a>{{ ', ' if not loop.last }}{% endfor %}</section>
+{% endif %}
+<pre id="out" class="out" hidden></pre>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Клиент ' ~ c.login if c else 'Новый клиент' }} · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>{{ 'Клиент: ' ~ c.login if c else 'Новый клиент' }}</h1>
+  {% if c %}
+  <div class="actions">
+    <a class="btn" href="{{ base }}/users/new?client={{ c.id }}">+ Профиль для клиента</a>
+    <form method="post" action="{{ base }}/clients/{{ c.id }}/delete" data-confirm="Удалить клиента {{ c.login }}? Его профили останутся, но без владельца.">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn danger">Удалить</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% if errors %}<div class="flash err">{% for e in errors %}{{ e }}<br>{% endfor %}</div>{% endif %}
+{% set f = form %}
+<form method="post" action="{{ base }}/clients/{{ c.id ~ '/edit' if c else 'new' }}" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="row">
+    <label>Логин для входа<input name="login" value="{{ f.login or '' }}" required maxlength="64" placeholder="ivan или ivan@example.com"></label>
+    <label>Имя (для вас)<input name="name" value="{{ f.name or '' }}" maxlength="100" placeholder="Иван Петров"></label>
+  </div>
+  <div class="row">
+    <label>{{ 'Новый пароль' if c else 'Пароль' }}
+      <span class="inline"><input name="password" id="cpw" value="{{ f.password or '' }}" class="mono" autocomplete="new-password" {{ '' if c else 'required' }} minlength="8" placeholder="{{ 'оставьте пустым, чтобы не менять' if c }}"><button type="button" class="btn sm" data-genpw="#cpw">Сгенерировать</button><button type="button" class="btn sm" data-copy="#cpw">Копировать</button></span>
+      <small>{{ 'при смене пароля все сессии клиента завершатся' if c else 'передайте клиенту вместе с адресом кабинета' }}</small>
+    </label>
+  </div>
+  <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if f.enabled in (1,'1') }}> Вход в кабинет разрешён</label>
+
+  <fieldset>
+    <legend>Профили клиента</legend>
+    {% if not profiles %}<p class="muted">Профилей пока нет. <a href="{{ base }}/users/new">Создать профиль</a></p>{% endif %}
+    <div class="checks">
+    {% for p in profiles %}
+      <label class="check"><input type="checkbox" name="profiles" value="{{ p.id }}" {{ 'checked' if p.id in sel }}> {{ p.username }}
+        {% if p.client_id and (not c or p.client_id != c.id) %}<span class="badge warn" title="Отметка перенесёт профиль этому клиенту">у {{ p.owner }}</span>{% endif %}
+        {% if p.note %}<span class="muted small">{{ p.note|truncate(30) }}</span>{% endif %}</label>
+    {% endfor %}
+    </div>
+    <small class="muted">У профиля может быть только один владелец. Если отметить чужой профиль, он перейдёт этому клиенту.</small>
+  </fieldset>
+  <label>Заметка<textarea name="note" rows="2" maxlength="1000">{{ f.note or '' }}</textarea></label>
+  <div class="actions">
+    <button class="btn primary">{{ 'Сохранить' if c else 'Создать клиента' }}</button>
+    <a class="btn ghost" href="{{ base }}/clients">Отмена</a>
+  </div>
+</form>
+
+<section class="card">
+  <h3>Доступ клиента</h3>
+  <p class="small">Адрес кабинета:</p>
+  <div class="copyline"><code id="portal">{{ portal }}</code><button class="btn sm" data-copy="#portal">Копировать</button></div>
+  {% if c %}
+  <p class="small muted">Последний вход: {{ c.last_login|ago }} · активных сессий: {{ sessions|length }}</p>
+  {% if sessions %}
+  <form method="post" action="{{ base }}/clients/{{ c.id }}/logout-all"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Завершить все сессии клиента</button></form>
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

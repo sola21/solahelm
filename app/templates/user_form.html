@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Редактирование ' ~ u.username if u else 'Новый профиль' }} · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head"><h1>{{ 'Профиль: ' ~ u.username if u else 'Новый профиль' }}</h1></div>
+{% if errors %}<div class="flash err">{% for e in errors %}{{ e }}<br>{% endfor %}</div>{% endif %}
+{% set f = form %}
+<form method="post" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="row">
+    <label>Логин<input name="username" value="{{ f.username or '' }}" required pattern="[a-z0-9][a-z0-9_.\-]{0,31}" maxlength="32" placeholder="ivan"><small>латиница в нижнем регистре, цифры, . _ -</small></label>
+    <label>Пароль
+      <span class="inline"><input name="password" id="pw" value="{{ f.password or '' }}" required minlength="6" class="mono"><button type="button" class="btn sm" data-genpw="#pw">Сгенерировать</button></span>
+      {% if u %}<small>при смене пароля старые ссылки перестанут работать</small>{% endif %}
+    </label>
+  </div>
+  <div class="row">
+    <label>Действует до (включительно)
+      <span class="inline"><input type="date" name="expires" id="exp" value="{{ f.expires or '' }}">
+      <button type="button" class="btn sm" data-days="30" data-target="#exp">+30 д</button><button type="button" class="btn sm" data-days="90" data-target="#exp">+90 д</button><button type="button" class="btn sm" data-days="0" data-target="#exp">∞</button></span>
+      <small>пусто = бессрочно</small>
+    </label>
+    <label>Лимит трафика, ГБ<input name="limit_gb" value="{{ f.limit_gb or '' }}" placeholder="0 = без лимита" inputmode="decimal"></label>
+  </div>
+  <div class="row">
+    <label>Владелец (клиент личного кабинета)
+      <select name="client_id">
+        <option value="">— не назначен —</option>
+        {% for c in clients %}<option value="{{ c.id }}" {{ 'selected' if f.client_id|string == c.id|string }}>{{ c.login }}{% if c.name %} ({{ c.name }}){% endif %}</option>{% endfor %}
+      </select>
+      <small>клиент увидит этот профиль в своём кабинете · <a href="{{ base }}/clients/new">создать клиента</a></small>
+    </label>
+  </div>
+  <div class="row">
+    <label>Правила маршрутизации (для Clash-конфига)
+      <select name="template_id">
+        <option value="">По умолчанию ({{ default_template_name or "простой встроенный конфиг" }})</option>
+        {% for t in templates %}<option value="{{ t.id }}" {{ 'selected' if f.template_id|string == t.id|string }}>{{ t.name }}</option>{% endfor %}
+      </select>
+      <small>что идёт напрямую, а что через VPN · <a href="{{ base }}/routing">управление шаблонами</a></small>
+    </label>
+  </div>
+  <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if f.enabled in (1,'1') }}> Профиль включён</label>
+
+  <fieldset>
+    <legend>Серверы</legend>
+    {% if not servers %}<p class="muted">Серверов пока нет — профиль можно будет привязать позже.</p>{% endif %}
+    <div class="checks">
+    {% for s in servers %}
+      <label class="check"><input type="checkbox" name="servers" value="{{ s.id }}" {{ 'checked' if s.id in sel }}> {{ s.name }} <span class="muted small">{{ s.host }}</span>{% if not s.enabled %} <span class="badge">выкл</span>{% endif %}</label>
+    {% endfor %}
+    </div>
+    {% if servers|length > 1 %}<button type="button" class="btn sm ghost" data-checkall="servers">Отметить все</button>{% endif %}
+    <p class="small muted">Профиль получает доступ только к отмеченным серверам, остальные в его ссылках и подписке не появятся. Для нового профиля заранее отмечены серверы, у которых включено «Предлагать новым профилям». Всю картину по всем профилям и серверам видно на странице <a href="{{ base }}/access">«Доступ»</a>.</p>
+  </fieldset>
+  <label>Заметка<textarea name="note" rows="2" maxlength="1000">{{ f.note or '' }}</textarea></label>
+  <div class="actions">
+    <button class="btn primary">{{ 'Сохранить' if u else 'Создать' }}</button>
+    <a class="btn ghost" href="{{ base }}/users{{ '/' ~ u.id if u }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

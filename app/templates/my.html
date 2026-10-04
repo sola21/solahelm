@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_macros.html" import user_badge, bar, conn_links %}
+{% block title %}Мои подключения{% endblock %}
+{% block content %}
+<div class="head"><h1>Мои подключения</h1></div>
+
+{% if not profiles %}
+<div class="card empty">У вас пока нет профилей подключения. Обратитесь к администратору.</div>
+{% endif %}
+
+{% for u in profiles %}
+<section class="card profile">
+  <div class="srv-head"><b class="big">{{ u.username }}</b> {{ user_badge(u) }}</div>
+  <dl class="kv">
+    <dt>Действует до</dt><dd>{{ u.expires_at|ts if u.expires_at else 'бессрочно' }}</dd>
+    <dt>Трафик</dt><dd>{{ (u.tx+u.rx)|bytes }} {% if u.traffic_limit %}из {{ u.traffic_limit|bytes }}{% else %}(без лимита){% endif %}</dd>
+  </dl>
+  {% if u.traffic_limit %}{{ bar(u.tx+u.rx, u.traffic_limit) }}{% endif %}
+
+  {% if u.state[0] != 'on' %}
+  <div class="flash warn">Профиль сейчас не активен ({{ u.state[1]|lower }}). Для продления обратитесь к администратору.</div>
+  {% else %}
+  <details class="howto">
+    <summary>Как подключиться</summary>
+    <ol class="small">
+      <li>Установите приложение: <b>Hiddify</b> (Android, iOS, Windows, macOS), <b>v2rayN</b> (Windows), <b>Streisand</b> или <b>V2Box</b> (iOS), <b>Clash Verge</b> / <b>FlClash</b>.</li>
+      <li>Проще всего добавить <b>подписку</b>: скопируйте ссылку или отсканируйте QR ниже. При изменении серверов приложение обновит их само.</li>
+      <li>Можно добавить и отдельный сервер: по ссылке или по QR. На сервере может быть несколько протоколов
+        (<b>Hysteria2</b>, <b>VLESS Reality</b>, <b>AnyTLS</b>) — используйте любой. Если один не работает в вашей сети, попробуйте другой.</li>
+    </ol>
+  </details>
+
+  <div class="cols">
+    <div>
+      <h3>Подписка (все серверы)</h3>
+      <div class="qrwrap">{{ u.sub_qr|safe }}</div>
+      <div class="copyline"><code id="sub{{ u.id }}">{{ u.sub_url }}</code><button class="btn sm primary" data-copy="#sub{{ u.id }}">Копировать</button></div>
+      <div class="copyline"><code id="subc{{ u.id }}">{{ u.sub_url }}/clash</code><button class="btn sm" data-copy="#subc{{ u.id }}">Копировать</button></div>
+      <p class="small muted">Вторая ссылка — для Clash Verge / FlClash.</p>
+      <div class="btns"><a class="btn sm" href="{{ pub }}/clash/{{ u.id }}.yaml">Скачать Clash YAML</a></div>
+    </div>
+  </div>
+
+  {% if u.conns %}
+  <h3 class="mt">Серверы</h3>
+  <div class="grid wide">
+  {% for s in u.conns %}
+    <div class="card conn inner">
+      <div class="srv-head"><b>{{ s.name }}</b></div>
+      {{ conn_links(s.links, u.id, s.id, 'my') }}
+    </div>
+  {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">К профилю пока не подключены серверы.</p>
+  {% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+
+<details class="card">
+  <summary><b>Сменить пароль от кабинета</b></summary>
+  <form method="post" action="{{ pub }}/password" class="form mt">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="row">
+      <label>Текущий пароль<input type="password" name="current" autocomplete="current-password" required></label>
+      <label>Новый пароль (от 8 символов)<input type="password" name="new" autocomplete="new-password" minlength="8" required></label>
+      <label>Повторите<input type="password" name="new2" autocomplete="new-password" minlength="8" required></label>
+    </div>
+    <button class="btn primary">Сменить пароль</button>
+  </form>
+</details>
+{% endblock %}

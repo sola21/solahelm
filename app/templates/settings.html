@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Настройки · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head"><h1>Настройки</h1></div>
+<div class="cols">
+  <section class="card">
+    <h3>Общие</h3>
+    <form method="post" action="{{ base }}/settings/general" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Публичный адрес (кабинет клиентов и ссылки подписки)
+        <input name="public_url" value="{{ public_url }}" placeholder="{{ env_public_url or detected }}">
+        <small>Например <code>https://panel.example.com/hy</code>. Сейчас используется: <code>{{ detected }}</code>. Админка находится по адресу <code>{{ detected }}{{ admin_path }}/</code>.</small>
+      </label>
+      <label>Интервал опроса серверов, c<input name="poll_interval" type="number" min="15" max="3600" value="{{ poll_interval }}"></label>
+      <label>Порог «нет связи»: неудачных опросов подряд<input name="fail_threshold" type="number" min="1" max="20" value="{{ fail_threshold }}">
+        <small>Разовые сбои SSH не считаются. Перед ошибкой панель повторяет опрос сама. Больше значение — меньше ложных тревог.</small></label>
+      <button class="btn primary">Сохранить</button>
+    </form>
+  </section>
+  <section class="card">
+    <h3>Пароль администратора</h3>
+    <form method="post" action="{{ base }}/settings/password" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Текущий пароль<input type="password" name="current" autocomplete="current-password" required></label>
+      <label>Новый пароль (от 10 символов)<input type="password" name="new" autocomplete="new-password" minlength="10" required></label>
+      <label>Повторите<input type="password" name="new2" autocomplete="new-password" minlength="10" required></label>
+      <button class="btn primary">Сменить пароль</button>
+    </form>
+  </section>
+</div>
+
+<section class="card">
+  <h3>SSH-ключ панели</h3>
+  <p class="small muted">Добавьте его в <code>~/.ssh/authorized_keys</code> на каждом VPS:</p>
+  <div class="copyline"><code id="pk">{{ pubkey }}</code><button class="btn sm" data-copy="#pk">Копировать</button></div>
+  <div class="copyline"><code id="pkcmd">mkdir -p ~/.ssh &amp;&amp; echo '{{ pubkey }}' &gt;&gt; ~/.ssh/authorized_keys &amp;&amp; chmod 700 ~/.ssh &amp;&amp; chmod 600 ~/.ssh/authorized_keys</code><button class="btn sm" data-copy="#pkcmd">Копировать команду</button></div>
+</section>
+
+<section class="card flush">
+  <h3 class="pad">Активные сессии</h3>
+  <table class="tbl">
+    <tr><th>Админ</th><th>IP</th><th>Браузер</th><th>Вход</th><th>Истекает</th></tr>
+    {% for x in sessions %}
+    <tr{% if x.token_hash == sess.token_hash %} class="me"{% endif %}><td>{{ x.username }}</td><td class="mono">{{ x.ip }}</td><td class="small muted">{{ x.ua|truncate(60) }}</td><td>{{ x.created|ts }}</td><td>{{ x.expires|ts }}</td></tr>
+    {% endfor %}
+  </table>
+  <form method="post" action="{{ base }}/settings/sessions/revoke" class="pad"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">Завершить все остальные сессии</button></form>
+</section>
+{% endblock %}

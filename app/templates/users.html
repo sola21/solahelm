@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_macros.html" import user_badge, bar %}
+{% block title %}Профили · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Профили <span class="muted">({{ users|length }})</span></h1>
+  <div class="actions"><a class="btn primary" href="{{ base }}/users/new">+ Новый профиль</a></div>
+</div>
+<form class="filters" method="get">
+  <input name="q" value="{{ q }}" placeholder="Поиск по логину или заметке">
+  <select name="state">
+    <option value="">Все статусы</option>
+    {% for k, v in [('on','Активные'),('off','Отключённые'),('expired','Срок истёк'),('limit','Лимит исчерпан')] %}
+    <option value="{{ k }}" {{ 'selected' if state==k }}>{{ v }}</option>{% endfor %}
+  </select>
+  <select name="server">
+    <option value="">Все серверы</option>
+    {% for s in servers %}<option value="{{ s.id }}" {{ 'selected' if server==s.id|string }}>{{ s.name }}</option>{% endfor %}
+  </select>
+  <button class="btn">Фильтр</button>
+</form>
+<div class="card flush">
+<table class="tbl">
+  <tr><th>Логин</th><th>Статус</th><th>Серверы</th><th>Трафик</th><th>Действует до</th><th>Онлайн</th><th>Владелец</th><th>Заметка</th></tr>
+  {% for u in users %}
+  <tr>
+    <td><a href="{{ base }}/users/{{ u.id }}"><b>{{ u.username }}</b></a></td>
+    <td>{{ user_badge(u) }}</td>
+    <td class="small">{% if u.servers_count %}{{ u.server_names|truncate(48) }}{% else %}<span class="badge warn">нет серверов</span>{% endif %}</td>
+    <td class="small">{{ (u.tx+u.rx)|bytes }}{% if u.traffic_limit %} / {{ u.traffic_limit|bytes }}{{ bar(u.tx+u.rx, u.traffic_limit) }}{% endif %}</td>
+    <td class="small">{{ u.expires_at|ts if u.expires_at else 'бессрочно' }}</td>
+    <td class="small">{% if u.online %}<span class="dot on"></span>{{ u.online }} подкл.{% else %}{{ u.last_online|ago }}{% endif %}</td>
+    <td class="small">{% if u.client_id %}<a href="{{ base }}/clients/{{ u.client_id }}">{{ u.owner }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td class="small muted">{{ u.note|truncate(40) }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8" class="muted">Ничего не найдено</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

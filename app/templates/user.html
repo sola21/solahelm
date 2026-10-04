@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_macros.html" import user_badge, bar, svc_badge, conn_links %}
+{% block title %}{{ u.username }} · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>{{ u.username }} {{ user_badge(u) }}</h1>
+  <div class="actions">
+    <a class="btn primary" href="{{ base }}/users/{{ u.id }}/edit">Редактировать</a>
+    <form method="post" action="{{ base }}/users/{{ u.id }}/action/toggle"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">{{ 'Отключить' if u.enabled else 'Включить' }}</button></form>
+    <form method="post" action="{{ base }}/users/{{ u.id }}/action/extend30"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">+30 дней</button></form>
+  </div>
+</div>
+
+<div class="cols">
+  <section class="card">
+    <h3>Параметры</h3>
+    <dl class="kv">
+      <dt>Логин</dt><dd class="mono">{{ u.username }}</dd>
+      <dt>Владелец</dt><dd>{% if owner %}<a href="{{ base }}/clients/{{ owner.id }}">{{ owner.login }}</a>{% if owner.name %} · {{ owner.name }}{% endif %}{% else %}<span class="muted">не назначен</span> · <a href="{{ base }}/users/{{ u.id }}/edit">назначить</a>{% endif %}</dd>
+      <dt>Пароль</dt><dd><span class="inline"><code class="secret" id="upw">{{ u.password }}</code><button class="btn sm" data-copy="#upw">Копировать</button></span></dd>
+      <dt>Правила Clash</dt><dd>{% if tpl %}<a href="{{ base }}/routing/{{ tpl.id }}">{{ tpl.name }}</a>{{ '' if tpl_own else ' (по умолчанию)' }}{% else %}<span class="muted">простой встроенный конфиг</span>{% endif %}</dd>
+      <dt>UUID (VLESS)</dt><dd><span class="inline"><code class="secret" id="uuid">{{ u.uuid }}</code><button class="btn sm" data-copy="#uuid">Копировать</button></span></dd>
+      <dt>Действует до</dt><dd>{{ u.expires_at|ts if u.expires_at else 'бессрочно' }}</dd>
+      <dt>Трафик</dt><dd>{{ (u.tx+u.rx)|bytes }} {% if u.traffic_limit %}из {{ u.traffic_limit|bytes }}{% else %}(без лимита){% endif %}<br><span class="small muted">tx {{ u.tx|bytes }} · rx {{ u.rx|bytes }}</span></dd>
+      <dt>Был онлайн</dt><dd>{{ u.last_online|ago }}</dd>
+      <dt>Создан</dt><dd>{{ u.created|ts }}</dd>
+    </dl>
+    {% if u.traffic_limit %}{{ bar(u.tx+u.rx, u.traffic_limit) }}{% endif %}
+    {% if u.note %}<p class="muted">{{ u.note }}</p>{% endif %}
+    <div class="btns">
+      <button class="btn sm" data-api="/api/users/{{ u.id }}/kick" data-confirm="Разорвать текущие подключения профиля на всех серверах?">Отключить сессии</button>
+      <form method="post" action="{{ base }}/users/{{ u.id }}/action/reset-traffic" data-confirm="Обнулить счётчик трафика?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Сбросить трафик</button></form>
+      <form method="post" action="{{ base }}/users/{{ u.id }}/action/regen-password" data-confirm="Сгенерировать новый пароль? Все выданные ссылки и QR перестанут работать."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Новый пароль</button></form>
+      <form method="post" action="{{ base }}/users/{{ u.id }}/action/delete" data-confirm="Удалить профиль {{ u.username }} со всех серверов?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">Удалить</button></form>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Подписка (все серверы профиля)</h3>
+    <p class="small muted">Для Hiddify, v2rayN, v2rayNG, Streisand, NekoBox, Clash Verge / FlClash (Clash-формат). Клиент сам подтянет изменения серверов.</p>
+    <div class="qrwrap">{{ sub_qr|safe }}</div>
+    <div class="copyline"><code id="sub">{{ sub_url }}</code><button class="btn sm" data-copy="#sub">Копировать</button></div>
+    <div class="copyline"><code id="subc">{{ sub_url }}/clash</code><button class="btn sm" data-copy="#subc">Копировать</button></div>
+    <div class="btns">
+      <a class="btn sm" href="{{ base }}/users/{{ u.id }}/clash.yaml">Скачать Clash Meta YAML</a>
+      <form method="post" action="{{ base }}/users/{{ u.id }}/action/regen-sub" data-confirm="Перевыпустить ссылку подписки? Старая перестанет работать."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">Перевыпустить ссылку</button></form>
+    </div>
+  </section>
+</div>
+
+<h2>Подключения по серверам</h2>
+{% if not servers %}<div class="card empty">Профиль не привязан ни к одному серверу. <a href="{{ base }}/users/{{ u.id }}/edit">Выбрать серверы</a></div>{% endif %}
+<div class="grid wide">
+{% for s in servers %}
+  <section class="card conn">
+    <div class="srv-head"><b><a href="{{ base }}/servers/{{ s.id }}">{{ s.name }}</a></b> {{ svc_badge(s.st) }}{% if s.u_online %} <span class="badge ok">онлайн: {{ s.u_online }}</span>{% endif %}</div>
+    {{ conn_links(s.links, u.id, s.id, 'admin') }}
+    <div class="small muted">Трафик здесь: {{ (s.u_tx + s.u_rx)|bytes }} · был онлайн {{ s.u_last|ago }}</div>
+  </section>
+{% endfor %}
+</div>
+
+{% if daily %}
+<h2>Трафик по дням</h2>
+<section class="card">
+  <div class="chart">
+  {% for d in daily %}{% set t = d.tx + d.rx %}
+    <div class="col" title="{{ d.day }}: {{ t|bytes }}"><i style="height:{{ pct(t, daily_max) or 1 }}%"></i><span>{{ d.day[8:] }}.{{ d.day[5:7] }}</span></div>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

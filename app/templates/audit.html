@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Журнал · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head"><h1>Журнал действий</h1></div>
+<div class="card flush">
+<table class="tbl">
+  <tr><th>Время</th><th>IP</th><th>Действие</th><th>Подробности</th></tr>
+  {% for a in rows %}
+  <tr><td class="small nowrap">{{ a.ts|ts }}</td><td class="mono small">{{ a.ip }}</td><td><code>{{ a.action }}</code></td><td class="small">{{ a.detail|truncate(200) }}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">Пусто</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

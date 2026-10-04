@@ -1,0 +1,58 @@
+{%- macro langsw(path, query) -%}
+<span class="lang" role="group" aria-label="Language">{% for c in ('ru', 'en') %}<a href="{{ pub }}/lang/{{ c }}?next={{ (path ~ ('?' ~ query if query else ''))|urlencode }}" hreflang="{{ c }}" class="{{ 'on' if lang() == c }}">{{ c|upper }}</a>{% endfor %}</span>
+{%- endmacro -%}
+<!doctype html>
+<html lang="{{ lang() }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>{% block title %}{{ brand }}{% endblock %}</title>
+<link rel="icon" href="{{ static }}/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="{{ static }}/app.css?v={{ version }}">
+</head>
+<body data-base="{{ base }}" data-csrf="{{ csrf }}">
+{% if sess %}
+<header class="top">
+  <a class="brand" href="{{ base }}/"><img src="{{ static }}/favicon.svg" alt=""> {{ brand }}</a>
+  <nav>
+    <a href="{{ base }}/" class="{{ 'on' if nav=='dash' }}">Обзор</a>
+    <a href="{{ base }}/servers" class="{{ 'on' if nav=='servers' }}">Серверы</a>
+    <a href="{{ base }}/users" class="{{ 'on' if nav=='users' }}">Профили</a>
+    <a href="{{ base }}/access" class="{{ 'on' if nav=='access' }}">Доступ</a>
+    <a href="{{ base }}/clients" class="{{ 'on' if nav=='clients' }}">Клиенты</a>
+    <a href="{{ base }}/routing" class="{{ 'on' if nav=='routing' }}">Правила</a>
+    <a href="{{ base }}/audit" class="{{ 'on' if nav=='audit' }}">Журнал</a>
+    <a href="{{ base }}/settings" class="{{ 'on' if nav=='settings' }}">Настройки</a>
+  </nav>
+  <form method="post" action="{{ base }}/logout" class="logout">
+    {{ langsw(request.url.path, request.url.query) }}
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <span class="muted">{{ sess.username }}</span>
+    <button class="btn ghost sm">Выйти</button>
+  </form>
+</header>
+{% elif client %}
+<header class="top">
+  <a class="brand" href="{{ pub }}/"><img src="{{ static }}/favicon.svg" alt=""> Мои подключения</a>
+  <nav></nav>
+  <form method="post" action="{{ pub }}/logout" class="logout">
+    {{ langsw(request.url.path, request.url.query) }}
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <span class="muted">{{ client.name or client.login }}</span>
+    <button class="btn ghost sm">Выйти</button>
+  </form>
+</header>
+{% endif %}
+{% if not sess and not client %}<div class="lang-float">{{ langsw(request.url.path, request.url.query) }}</div>{% endif %}
+<main class="wrap">
+  {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
+  {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="foot">{{ brand }} v{{ version }}</footer>
+<div id="toast" class="toast" hidden></div>
+{% if lang() == 'en' %}<script src="{{ pub }}/i18n.js?v={{ version }}"></script>{% endif %}
+<script src="{{ static }}/app.js?v={{ version }}"></script>
+</body>
+</html>

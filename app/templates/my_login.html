@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Вход · Мои подключения{% endblock %}
+{% block content %}
+<div class="login">
+  <form method="post" action="{{ pub }}/login" class="card">
+    <div class="login-head"><img src="{{ static }}/favicon.svg" alt=""><h1>Мои подключения</h1></div>
+    {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+    <label>Логин<input name="login" autocomplete="username" required autofocus></label>
+    <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary wide">Войти</button>
+  </form>
+</div>
+{% endblock %}

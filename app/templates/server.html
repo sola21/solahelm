@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% from "_macros.html" import svc_badge, bar, sync_badge, user_badge, uptime_strip %}
+{% block title %}{{ s.name }} · {{ brand }}{% endblock %}
+{% block content %}
+{% set st = s.st %}{% set info = s.info %}
+<div class="head">
+  <h1>{{ s.name }} {{ svc_badge(st) }} {{ sync_badge(s) }}</h1>
+  <div class="actions">
+    <a class="btn" href="{{ base }}/servers/{{ s.id }}/edit">Настройки</a>
+    <form method="post" action="{{ base }}/servers/{{ s.id }}/delete" data-confirm="Удалить сервер {{ s.name }} из панели? На самом VPS ничего не изменится.">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn danger">Удалить</button>
+    </form>
+  </div>
+</div>
+
+{% if s.sync_error %}<div class="flash err"><b>Ошибка синхронизации:</b><pre class="plain">{{ s.sync_error }}</pre></div>{% endif %}
+{% if drift %}<div class="flash warn"><b>Конфиг Hysteria на сервере расходится с панелью.</b>
+  {% if drift.extra %}<br>Есть на сервере, но не в панели (будут удалены при синхронизации): <b>{{ drift.extra|join(', ') }}</b>{% endif %}
+  {% if drift.missing %}<br>Должны быть по панели, но их нет на сервере: <b>{{ drift.missing|join(', ') }}</b>{% endif %}
+  {% if drift.changed %}<br>Пароль отличается: <b>{{ drift.changed|join(', ') }}</b>{% endif %}
+  <br><span class="small">Источник истины — панель: пользователи, добавленные или убранные в config.yaml руками, при синхронизации приводятся к списку панели. Чтобы изменить доступ, используйте «Доступ» или список профилей ниже.</span>
+  <div class="btns"><button class="btn sm primary" data-api="/api/servers/{{ s.id }}/sync" data-reload="1500">Синхронизировать сейчас</button></div></div>{% endif %}
+{% if st.down %}<div class="flash err"><b>Нет связи</b> ({{ st.fails }} неудачных опросов подряд): {{ st.error }}</div>
+{% elif st.fails %}<div class="flash warn">Последний опрос не удался ({{ st.fails }} из {{ fail_threshold }}, сервер пока считается доступным): {{ st.error }}</div>{% endif %}
+{% if st.stats_error %}<div class="flash warn">trafficStats: {{ st.stats_error }}</div>{% endif %}
+
+<div class="cols">
+  <section class="card">
+    <h3>Состояние</h3>
+    <dl class="kv">
+      <dt>SSH</dt><dd class="mono">{{ s.ssh_user }}@{{ s.host }}:{{ s.ssh_port }} · {{ {'panelkey':'ключ панели','password':'пароль','key':'свой ключ'}[s.ssh_auth] }}</dd>
+      <dt>Ключ хоста</dt><dd class="mono small">{{ hostkey_fp or 'ещё не получен' }}</dd>
+      <dt>ОС</dt><dd>{{ st.os or '—' }}</dd>
+      {% if s.hy2_enabled %}<dt>Hysteria</dt><dd>{{ st.version or '—' }} · служба {{ st.active or '?' }}/{{ st.enabled or '?' }}</dd>{% endif %}
+      {% if s.vless_enabled or s.anytls_enabled %}<dt>sing-box</dt><dd>{{ st.sb_version or '—' }} · служба {{ st.sb_active or '?' }}</dd>{% endif %}
+      <dt>Запущена</dt><dd>{{ st.since or '—' }}</dd>
+      <dt>Аптайм ОС</dt><dd>{{ st.uptime|dur if st.uptime else '—' }}</dd>
+      <dt>Нагрузка</dt><dd>{{ st.load or '—' }}{% if st.cpus %} ({{ st.cpus }} CPU){% endif %}</dd>
+      <dt>Сеть ({{ st.iface or '?' }})</dt><dd>{% if st.rate_rx is defined %}↓ {{ (st.rate_rx*8/1000000)|round(2) }} · ↑ {{ (st.rate_tx*8/1000000)|round(2) }} Мбит/с{% else %}—{% endif %}{% if st.net_rx %}<br><span class="small muted">всего ↓ {{ st.net_rx|bytes }} · ↑ {{ st.net_tx|bytes }}</span>{% endif %}</dd>
+      <dt>Проверен</dt><dd>{{ (st.checked or st.ts)|ago if (st.checked or st.ts) else 'никогда' }}{% if st.last_ok %} · последний успех {{ st.last_ok|ago }}{% endif %}</dd>
+    </dl>
+    {% if st.mem_total %}<div class="small muted">RAM {{ st.mem_used|bytes }} / {{ st.mem_total|bytes }}</div>{{ bar(st.mem_used, st.mem_total) }}{% endif %}
+    {% if st.disk_total %}<div class="small muted">Диск {{ st.disk_used|bytes }} / {{ st.disk_total|bytes }}</div>{{ bar(st.disk_used, st.disk_total) }}{% endif %}
+  </section>
+
+  <section class="card">
+    <h3>Конфигурация</h3>
+    <dl class="kv">
+      <dt>Клиенты подключаются к</dt><dd class="mono">{{ endpoint.host }}:{{ endpoint.hop or endpoint.port }}</dd>
+      <dt>SNI</dt><dd>{{ endpoint.sni or '—' }}{% if endpoint.insecure %} <span class="badge warn">insecure</span>{% endif %}</dd>
+      <dt>TLS</dt><dd>{{ info.tls or '—' }}{% if info.domains %} · {{ info.domains|join(', ') }}{% endif %}</dd>
+      <dt>Auth</dt><dd>{{ info.auth_type or '—' }} · в конфиге {{ (info.users or {})|length }} польз.</dd>
+      <dt>Obfs</dt><dd>{{ 'salamander' if info.obfs else 'нет' }}</dd>
+      <dt>Masquerade</dt><dd>{{ info.masquerade or 'нет' }}</dd>
+      <dt>trafficStats</dt><dd>{{ '127.0.0.1:' ~ info.stats_port if info.stats_port else 'выключен' }}</dd>
+      <dt>Синхронизирован</dt><dd>{{ s.last_sync|ago if s.last_sync else 'ни разу' }}</dd>
+    </dl>
+    {% if s.notes %}<p class="muted small">{{ s.notes }}</p>{% endif %}
+  </section>
+</div>
+
+<section class="card" id="avail">
+  <h3>Доступность</h3>
+  <div class="btns" style="margin:0 0 12px">
+    {% for k, l in [('24h','24 часа'),('7d','7 дней'),('30d','30 дней')] %}<a class="btn sm {{ 'primary' if hist.range == k else 'ghost' }}" href="?range={{ k }}#avail">{{ l }}</a>{% endfor %}
+  </div>
+  <div class="tiles mini">
+    <div class="tile"><span>Доступность</span><b>{{ (hist.uptime|string ~ '%') if hist.uptime is not none else '—' }}</b></div>
+    <div class="tile"><span>Ответ, среднее</span><b>{{ hist.avg_ms ~ ' мс' if hist.avg_ms else '—' }}</b></div>
+    <div class="tile"><span>Проверок</span><b>{{ hist.total }}</b></div>
+    <div class="tile"><span>Неудачных</span><b>{{ hist.failed }}</b></div>
+  </div>
+  {{ uptime_strip(hist, true) }}
+  <div class="axis small muted"><span>{{ hist.buckets[0].t|ts }}</span><span>сейчас</span></div>
+  <p class="small muted">Зелёный — все проверки успешны, жёлтый — были сбои (или помог повтор), красный — сервер не отвечал, серый — нет данных.
+    Проверка — это SSH-подключение панели к серверу раз в {{ poll_interval }} с, а не ICMP-ping.</p>
+  {% if hist.max_ms %}
+  <h4>Время ответа (SSH-опрос целиком)</h4>
+  <div class="lat">{% for b in hist.buckets %}<i style="height:{{ b.ms_pct }}%" title="{{ b.t|ts }}{% if b.ms %} · {{ b.ms }} мс{% endif %}"></i>{% endfor %}</div>
+  <div class="small muted">среднее {{ hist.avg_ms }} мс · максимум {{ hist.max_ms }} мс</div>
+  {% endif %}
+  {% if hist.problems %}
+  <details class="mt"><summary>Последние сбои ({{ hist.problems|length }})</summary>
+    <table class="tbl">
+      {% for p in hist.problems %}<tr><td class="nowrap small">{{ p.ts|ts }}</td><td class="small">{{ 'повтор помог' if p.ok else 'не удалось' }}</td><td class="small">{{ p.err }}</td></tr>{% endfor %}
+    </table>
+  </details>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h3>Действия</h3>
+  <div class="btns">
+    <button class="btn" data-api="/api/servers/{{ s.id }}/check" data-reload="500">Проверить</button>
+    <button class="btn primary" data-api="/api/servers/{{ s.id }}/sync" data-reload="1500">Синхронизировать профили</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/import" data-confirm="Прочитать userpass из config.yaml и создать/привязать эти профили в панели?" data-reload="2500">Импорт профилей с сервера</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/restart" data-confirm="Перезапустить hysteria? Все клиенты переподключатся.">Перезапустить</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/start">Старт</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/stop" data-confirm="Остановить hysteria на {{ s.name }}?">Стоп</button>
+    <button class="btn" data-logs="/api/servers/{{ s.id }}/logs">Журнал Hysteria</button>
+    {% if s.vless_enabled or s.anytls_enabled %}<button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=sb">Журнал sing-box</button>{% endif %}
+    {% if s.hy2_enabled %}
+    <button class="btn" data-config="/api/servers/{{ s.id }}/config" data-save="/api/servers/{{ s.id }}/config" data-title="Hysteria2: {{ s.config_path }}">Конфиг Hysteria (YAML)</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/rollback" data-confirm="Восстановить предыдущий config.yaml из последнего бэкапа и перезапустить службу?">Откатить Hysteria</button>
+    {% endif %}
+    {% if s.vless_enabled or s.anytls_enabled %}
+    <button class="btn" data-config="/api/servers/{{ s.id }}/sbconfig" data-save="/api/servers/{{ s.id }}/sbconfig" data-title="sing-box (VLESS / AnyTLS): {{ s.sb_config_path }}">Конфиг VLESS / AnyTLS (JSON)</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=sb" data-confirm="Восстановить предыдущий конфиг sing-box из последнего бэкапа и перезапустить службу?">Откатить sing-box</button>
+    {% endif %}
+    <button class="btn" data-job="/api/servers/{{ s.id }}/update-core" data-confirm="Обновить Hysteria2 до последней версии (get.hy2.sh) и перезапустить?">Обновить Hysteria</button>
+    {% if s.ssh_auth == 'password' %}<button class="btn" data-api="/api/servers/{{ s.id }}/install-key" data-confirm="Добавить ключ панели в authorized_keys и перейти на вход по ключу?" data-reload="1500">Установить ключ панели</button>{% endif %}
+    {% if s.host_key %}<button class="btn ghost" data-api="/api/servers/{{ s.id }}/reset-hostkey" data-confirm="Сбросить сохранённый ключ хоста? Делайте это только если VPS переустановлен." data-reload="800">Сбросить ключ хоста</button>{% endif %}
+  </div>
+  <pre id="out" class="out" hidden></pre>
+  <div id="cfgbox" hidden>
+    <p class="small"><b id="cfgtitle"></b></p>
+    <p class="small muted">При сохранении создаётся бэкап, служба перезапускается. Если она не поднимется, конфиг откатится автоматически.
+      Пользователи (<code>auth.userpass</code> у Hysteria, <code>users</code> в inbound'ах <code>vless-in</code> и <code>anytls-in</code>) перезаписываются панелью при синхронизации профилей, остальное можно менять вручную.
+      В конфигах есть пароли и ключи Reality: не показывайте их посторонним.</p>
+    <textarea id="cfgtext" class="mono code" rows="24" spellcheck="false"></textarea>
+    <div class="btns"><button class="btn primary" id="cfgsave" data-url="">Сохранить и перезапустить</button><button class="btn ghost" id="cfgclose">Закрыть</button></div>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Установка / переустановка Hysteria2</h3>
+  <p class="small muted">Выполняет шаги вашей инструкции на чистом Debian/Ubuntu: обновляет систему, запускает get.hy2.sh, создаёт сайт-заглушку, пишет config.yaml (ACME, userpass, masquerade, trafficStats), настраивает ufw и запускает службу. Текущий конфиг сохраняется в бэкап. Перед запуском A-запись домена должна указывать на IP сервера.</p>
+  <form id="provision" class="form" data-persist="prov-hy-{{ s.id }}" data-url="/api/servers/{{ s.id }}/provision">
+    <div class="row">
+      <label>Домен<input name="domain" value="{{ (info.domains or [''])[0] or s.public_host }}" placeholder="nl.example.com" required></label>
+      <label>E-mail для ACME<input name="email" type="email" required></label>
+      <label>Порт<input name="port" type="number" value="{{ info.port or 443 }}" min="1" max="65535"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="upgrade"> apt upgrade (дольше)</label>
+    <label class="check"><input type="checkbox" name="ufw" checked> Настроить ufw (SSH {{ s.ssh_port }}/tcp, 80/tcp, порт/tcp+udp)</label>
+    <label class="check"><input type="checkbox" name="assign_all"> Привязать к серверу все профили панели</label>
+    <label class="check"><input type="checkbox" name="obfs"> Obfs salamander (маскировка трафика; сайт-заглушка по HTTP/3 работать не будет)</label>
+    <div class="btns"><button class="btn primary">Запустить установку</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <h3>sing-box: VLESS + AnyTLS (параллельно с Hysteria2)</h3>
+  <p class="small muted">Устанавливает sing-box (sing-box.app) и добавляет к профилям панели дополнительные протоколы.
+    Hysteria2 остаётся как есть. Каждый профиль получает свой UUID (VLESS) и использует свой пароль (AnyTLS).
+    Порты 80 и 443 (TCP) занимает Hysteria2, поэтому по умолчанию: VLESS — 8443, AnyTLS — 9443. Ключи Reality панель генерирует сама.
+    После установки профили синхронизируются автоматически, как и для Hysteria2.</p>
+  {% if s.vless_enabled or s.anytls_enabled %}
+  <p class="small">Сейчас включено:
+    {% if s.vless_enabled %}<span class="badge ok">VLESS Reality :{{ s.vless_port }} → {{ s.reality_sni }}</span>{% endif %}
+    {% if s.anytls_enabled %}<span class="badge ok">AnyTLS :{{ s.anytls_port }} · {{ s.anytls_domain }}{{ ' · самоподписанный' if s.anytls_insecure }}</span>{% endif %}</p>
+  {% endif %}
+  <form id="provision-sb" class="form" data-persist="prov-sb-{{ s.id }}" data-url="/api/servers/{{ s.id }}/provision-sb">
+    <fieldset>
+      <legend>VLESS + Reality</legend>
+      <label class="check"><input type="checkbox" name="vless" {{ 'checked' if s.vless_enabled }}> Включить VLESS (xtls-rprx-vision, Reality)</label>
+      <div class="row">
+        <label>Порт (TCP)<input name="vless_port" type="number" min="1" max="65535" value="{{ s.vless_port or 8443 }}"></label>
+        <label>Домен для маскировки (сайт с TLS 1.3)<input name="reality_sni" value="{{ s.reality_sni or 'www.microsoft.com' }}"><small>Reality выдаёт себя за этот сайт, домен не ваш</small></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>AnyTLS</legend>
+      <label class="check"><input type="checkbox" name="anytls" {{ 'checked' if s.anytls_enabled }}> Включить AnyTLS</label>
+      <div class="row">
+        <label>Порт (TCP)<input name="anytls_port" type="number" min="1" max="65535" value="{{ s.anytls_port or 9443 }}"></label>
+        <label>Домен сервера (A-запись на этот VPS)<input name="anytls_domain" value="{{ s.anytls_domain or (info.domains or [''])[0] or s.public_host }}" placeholder="nl.example.com"></label>
+        <label>Сертификат
+          <select name="anytls_cert">
+            <option value="hysteria" {{ 'selected' if s.anytls_cert != 'selfsigned' }}>Взять у Hysteria2 (Let's Encrypt, обновляется само)</option>
+            <option value="selfsigned" {{ 'selected' if s.anytls_cert == 'selfsigned' }}>Самоподписанный (клиенты подключаются с insecure)</option>
+          </select>
+        </label>
+      </div>
+    </fieldset>
+    <label class="check"><input type="checkbox" name="ufw" checked> Открыть порты в ufw</label>
+    <label class="check"><input type="checkbox" name="assign_all"> Привязать к серверу все профили панели</label>
+    <div class="btns"><button class="btn primary">{{ 'Применить / переустановить' if (s.vless_enabled or s.anytls_enabled) else 'Установить sing-box' }}</button></div>
+  </form>
+</section>
+
+<section class="card flush">
+  <h3 class="pad">Профили на сервере ({{ users|length }})</h3>
+  <table class="tbl">
+    <tr><th>Профиль</th><th>Статус</th><th class="r">Онлайн</th><th class="r">Трафик здесь</th><th>Был онлайн</th><th></th></tr>
+    {% for u in users %}
+    <tr>
+      <td><a href="{{ base }}/users/{{ u.id }}">{{ u.username }}</a></td>
+      <td>{{ user_badge(u) }}</td>
+      <td class="r">{% if u.s_online %}<span class="dot on"></span>{{ u.s_online }}{% else %}—{% endif %}</td>
+      <td class="r">{{ (u.s_tx + u.s_rx)|bytes }}</td>
+      <td class="small">{{ u.s_last|ago }}</td>
+      <td class="r nowrap">{% if u.s_online %}<button class="btn sm" data-kick="/api/servers/{{ s.id }}/kick" data-user="{{ u.username }}">Отключить</button> {% endif %}<form method="post" action="{{ base }}/servers/{{ s.id }}/users/{{ u.id }}/remove" style="display:inline" data-confirm="Убрать профиль {{ u.username }} с сервера {{ s.name }}? Клиент потеряет доступ к этому серверу."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">Убрать</button></form></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Нет привязанных профилей. Создайте профиль или выполните импорт с сервера.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section class="card">
+  <h3>Добавить профили на этот сервер</h3>
+  {% if linkable %}
+  <form method="post" action="{{ base }}/servers/{{ s.id }}/users/add" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="checks">{% for u in linkable %}<label class="check"><input type="checkbox" name="profiles" value="{{ u.id }}"> {{ u.username }}{% if u.note %} <span class="muted small">{{ u.note|truncate(24) }}</span>{% endif %}</label>{% endfor %}</div>
+    <div class="btns">
+      <button class="btn primary">Добавить выбранные</button>
+      <button class="btn" name="all" value="1" data-confirm-btn="Добавить на сервер ВСЕ профили панели?">Добавить все ({{ linkable|length }})</button>
+    </div>
+  </form>
+  {% else %}<p class="muted small">Все профили панели уже добавлены на этот сервер. Выборочный доступ настраивается на странице <a href="{{ base }}/access">«Доступ»</a>.</p>{% endif %}
+</section>
+
+{% if jobs %}
+<section class="card">
+  <h3>Задачи</h3>
+  {% for j in jobs %}<div><a href="{{ base }}/jobs/{{ j.id }}">#{{ j.id }} {{ j.kind }}</a> — <span class="badge {{ {'ok':'ok','error':'err','running':'warn'}.get(j.status,'') }}">{{ j.status }}</span> <span class="small muted">{{ j.created|ts }}</span></div>{% endfor %}
+</section>
+{% endif %}
+{% endblock %}

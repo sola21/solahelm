@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Задача #{{ j.id }} · {{ brand }}{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Задача #{{ j.id }}: {{ j.kind }} <span id="jobstatus" class="badge {{ {'ok':'ok','error':'err','running':'warn'}.get(j.status,'') }}">{{ j.status }}</span></h1>
+  <div class="actions">{% if j.server_id %}<a class="btn" href="{{ base }}/servers/{{ j.server_id }}">← {{ j.server_name or 'Сервер' }}</a>{% endif %}</div>
+</div>
+<p class="muted small">Начата {{ j.created|ts }}{% if j.finished %}, завершена {{ j.finished|ts }}{% endif %}</p>
+<pre id="joblog" class="out tall" data-job="{{ j.id }}" data-running="{{ 1 if j.status=='running' else 0 }}">{{ j.log }}</pre>
+{% endblock %}
