@@ -1,0 +1,27 @@
+# --- секреты и данные: НИКОГДА не коммитить ---
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.db-wal
+*.db-shm
+secret.key
+panel_ed25519
+panel_ed25519.pub
+*.pem
+*.key
+
+# --- окружение, кэши, редакторы ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+.claude/
+.idea/
+.vscode/
+backups/
+*.bak
+*.bak.*
+*.tgz
+*.zip
