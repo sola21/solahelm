@@ -1,0 +1,21 @@
+# Весь трафик через VPN, локальные сети напрямую. Минимальный шаблон без TUN и DNS-подмены.
+# Прокси сюда подставляет панель: "@proxies" в группе заменяется серверами и протоколами профиля.
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: true
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies:
+      - "@proxies"
+      - DIRECT
+
+rules:
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - MATCH,PROXY
