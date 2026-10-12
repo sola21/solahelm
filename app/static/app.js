@@ -277,10 +277,13 @@
       if (!ask("Установить/применить sing-box на сервере? Существующий конфиг sing-box сохранится в бэкап, Hysteria2 не затрагивается.")) return;
       const fd = new FormData(provSb);
       const body = {
-        vless: fd.has("vless"), anytls: fd.has("anytls"), ufw: fd.has("ufw"), assign_all: fd.has("assign_all"),
-        vless_port: +fd.get("vless_port"), anytls_port: +fd.get("anytls_port"),
+        ufw: fd.has("ufw"), assign_all: fd.has("assign_all"),
         reality_sni: fd.get("reality_sni"), anytls_domain: fd.get("anytls_domain"), anytls_cert: fd.get("anytls_cert"),
       };
+      for (const p of ["vless", "anytls", "trojan", "tuic", "ss", "naive"]) {
+        body[p] = fd.has(p);
+        body[p + "_port"] = +fd.get(p + "_port");
+      }
       busy(provSb.querySelector("button"), async () => {
         const d = await api(provSb.dataset.url, { body });
         if (d.ok) location.href = d.url; else out(d.error, true);

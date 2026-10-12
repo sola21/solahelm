@@ -32,7 +32,7 @@
       <dt>Ключ хоста</dt><dd class="mono small">{{ hostkey_fp or 'ещё не получен' }}</dd>
       <dt>ОС</dt><dd>{{ st.os or '—' }}</dd>
       {% if s.hy2_enabled %}<dt>Hysteria</dt><dd>{{ st.version or '—' }} · служба {{ st.active or '?' }}/{{ st.enabled or '?' }}</dd>{% endif %}
-      {% if s.vless_enabled or s.anytls_enabled %}<dt>sing-box</dt><dd>{{ st.sb_version or '—' }} · служба {{ st.sb_active or '?' }}</dd>{% endif %}
+      {% if s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}<dt>sing-box</dt><dd>{{ st.sb_version or '—' }} · служба {{ st.sb_active or '?' }}</dd>{% endif %}
       <dt>Запущена</dt><dd>{{ st.since or '—' }}</dd>
       <dt>Аптайм ОС</dt><dd>{{ st.uptime|dur if st.uptime else '—' }}</dd>
       <dt>Нагрузка</dt><dd>{{ st.load or '—' }}{% if st.cpus %} ({{ st.cpus }} CPU){% endif %}</dd>
@@ -98,12 +98,12 @@
     <button class="btn" data-api="/api/servers/{{ s.id }}/service/start">Старт</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/service/stop" data-confirm="Остановить hysteria на {{ s.name }}?">Стоп</button>
     <button class="btn" data-logs="/api/servers/{{ s.id }}/logs">Журнал Hysteria</button>
-    {% if s.vless_enabled or s.anytls_enabled %}<button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=sb">Журнал sing-box</button>{% endif %}
+    {% if s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}<button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=sb">Журнал sing-box</button>{% endif %}
     {% if s.hy2_enabled %}
     <button class="btn" data-config="/api/servers/{{ s.id }}/config" data-save="/api/servers/{{ s.id }}/config" data-title="Hysteria2: {{ s.config_path }}">Конфиг Hysteria (YAML)</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/rollback" data-confirm="Восстановить предыдущий config.yaml из последнего бэкапа и перезапустить службу?">Откатить Hysteria</button>
     {% endif %}
-    {% if s.vless_enabled or s.anytls_enabled %}
+    {% if s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}
     <button class="btn" data-config="/api/servers/{{ s.id }}/sbconfig" data-save="/api/servers/{{ s.id }}/sbconfig" data-title="sing-box (VLESS / AnyTLS): {{ s.sb_config_path }}">Конфиг VLESS / AnyTLS (JSON)</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=sb" data-confirm="Восстановить предыдущий конфиг sing-box из последнего бэкапа и перезапустить службу?">Откатить sing-box</button>
     {% endif %}
@@ -140,30 +140,34 @@
 </section>
 
 <section class="card">
-  <h3>sing-box: VLESS + AnyTLS (параллельно с Hysteria2)</h3>
-  <p class="small muted">Устанавливает sing-box (sing-box.app) и добавляет к профилям панели дополнительные протоколы.
-    Hysteria2 остаётся как есть. Каждый профиль получает свой UUID (VLESS) и использует свой пароль (AnyTLS).
-    Порты 80 и 443 (TCP) занимает Hysteria2, поэтому по умолчанию: VLESS — 8443, AnyTLS — 9443. Ключи Reality панель генерирует сама.
+  <h3>sing-box: дополнительные протоколы (параллельно с Hysteria2)</h3>
+  <p class="small muted">Устанавливает sing-box (sing-box.app) и добавляет к профилям панели дополнительные протоколы. Hysteria2 остаётся как есть.
+    Чем больше разных протоколов включено, тем выше шанс, что при блокировке одного останется рабочий другой. Лучше сочетать разные «отпечатки»:
+    QUIC (Hysteria2, TUIC), TLS на вашем домене (AnyTLS, Trojan), маскировка под чужой сайт (VLESS Reality), обычный шифрованный поток (Shadowsocks).
+    Порты 80 и 443 (TCP) занимает Hysteria2, поэтому у остальных порты по умолчанию другие. Ключи Reality и Shadowsocks панель генерирует сама.
     После установки профили синхронизируются автоматически, как и для Hysteria2.</p>
-  {% if s.vless_enabled or s.anytls_enabled %}
+  {% if s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}
   <p class="small">Сейчас включено:
     {% if s.vless_enabled %}<span class="badge ok">VLESS Reality :{{ s.vless_port }} → {{ s.reality_sni }}</span>{% endif %}
-    {% if s.anytls_enabled %}<span class="badge ok">AnyTLS :{{ s.anytls_port }} · {{ s.anytls_domain }}{{ ' · самоподписанный' if s.anytls_insecure }}</span>{% endif %}</p>
+    {% if s.anytls_enabled %}<span class="badge ok">AnyTLS :{{ s.anytls_port }}</span>{% endif %}
+    {% if s.trojan_enabled %}<span class="badge ok">Trojan :{{ s.trojan_port }}</span>{% endif %}
+    {% if s.tuic_enabled %}<span class="badge ok">TUIC :{{ s.tuic_port }} UDP</span>{% endif %}
+    {% if s.naive_enabled %}<span class="badge ok">Naive :{{ s.naive_port }}</span>{% endif %}
+    {% if s.ss_enabled %}<span class="badge ok">Shadowsocks-2022 :{{ s.ss_port }}</span>{% endif %}
+    {% if (s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.naive_enabled) %}<span class="badge">{{ s.anytls_domain }}{{ ' · самоподписанный' if s.anytls_insecure }}</span>{% endif %}</p>
   {% endif %}
   <form id="provision-sb" class="form" data-persist="prov-sb-{{ s.id }}" data-url="/api/servers/{{ s.id }}/provision-sb">
     <fieldset>
-      <legend>VLESS + Reality</legend>
-      <label class="check"><input type="checkbox" name="vless" {{ 'checked' if s.vless_enabled }}> Включить VLESS (xtls-rprx-vision, Reality)</label>
+      <legend>VLESS + Reality (TCP)</legend>
+      <label class="check"><input type="checkbox" name="vless" {{ 'checked' if s.vless_enabled }}> Включить VLESS (xtls-rprx-vision, Reality): без домена и сертификата, маскируется под чужой сайт</label>
       <div class="row">
         <label>Порт (TCP)<input name="vless_port" type="number" min="1" max="65535" value="{{ s.vless_port or 8443 }}"></label>
         <label>Домен для маскировки (сайт с TLS 1.3)<input name="reality_sni" value="{{ s.reality_sni or 'www.microsoft.com' }}"><small>Reality выдаёт себя за этот сайт, домен не ваш</small></label>
       </div>
     </fieldset>
     <fieldset>
-      <legend>AnyTLS</legend>
-      <label class="check"><input type="checkbox" name="anytls" {{ 'checked' if s.anytls_enabled }}> Включить AnyTLS</label>
+      <legend>TLS на домене сервера: AnyTLS, Trojan, TUIC, Naive</legend>
       <div class="row">
-        <label>Порт (TCP)<input name="anytls_port" type="number" min="1" max="65535" value="{{ s.anytls_port or 9443 }}"></label>
         <label>Домен сервера (A-запись на этот VPS)<input name="anytls_domain" value="{{ s.anytls_domain or (info.domains or [''])[0] or s.public_host }}" placeholder="nl.example.com"></label>
         <label>Сертификат
           <select name="anytls_cert">
@@ -172,10 +176,33 @@
           </select>
         </label>
       </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="anytls" {{ 'checked' if s.anytls_enabled }}> AnyTLS (TCP): новый протокол, не все клиенты его знают</label>
+        <label>Порт<input name="anytls_port" type="number" min="1" max="65535" value="{{ s.anytls_port or 9443 }}"></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="trojan" {{ 'checked' if s.trojan_enabled }}> Trojan (TCP): простой TLS-протокол, поддерживается почти всеми клиентами</label>
+        <label>Порт<input name="trojan_port" type="number" min="1" max="65535" value="{{ s.trojan_port or 7443 }}"></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="tuic" {{ 'checked' if s.tuic_enabled }}> TUIC v5 (UDP, QUIC): запасной вариант на случай блокировки Hysteria2</label>
+        <label>Порт (UDP)<input name="tuic_port" type="number" min="1" max="65535" value="{{ s.tuic_port or 8444 }}"></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="naive" {{ 'checked' if s.naive_enabled }}> Naive (HTTPS/HTTP3): выглядит как обычный сайт, клиентов мало</label>
+        <label>Порт (TCP + UDP)<input name="naive_port" type="number" min="1" max="65535" value="{{ s.naive_port or 6443 }}"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Shadowsocks-2022</legend>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="ss" {{ 'checked' if s.ss_enabled }}> Shadowsocks-2022 (TCP + UDP): без TLS и домена, лёгкий, но заметнее для DPI</label>
+        <label>Порт<input name="ss_port" type="number" min="1" max="65535" value="{{ s.ss_port or 2443 }}"></label>
+      </div>
     </fieldset>
     <label class="check"><input type="checkbox" name="ufw" checked> Открыть порты в ufw</label>
     <label class="check"><input type="checkbox" name="assign_all"> Привязать к серверу все профили панели</label>
-    <div class="btns"><button class="btn primary">{{ 'Применить / переустановить' if (s.vless_enabled or s.anytls_enabled) else 'Установить sing-box' }}</button></div>
+    <div class="btns"><button class="btn primary">{{ 'Применить / переустановить' if (s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled) else 'Установить sing-box' }}</button></div>
   </form>
 </section>
 

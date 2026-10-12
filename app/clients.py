@@ -1,5 +1,5 @@
-"""Клиентские артефакты: ссылки hysteria2:// / vless:// / anytls://, QR-коды, YAML для клиента Hysteria
-и Clash Meta (mihomo), подписки."""
+"""Клиентские артефакты: ссылки hysteria2:// / vless:// / anytls:// / trojan:// / tuic:// / ss://, QR-коды,
+YAML для клиента Hysteria и Clash Meta (mihomo), подписки."""
 import base64
 import io
 import ipaddress
@@ -9,7 +9,11 @@ from urllib.parse import quote
 import segno
 from ruamel.yaml import YAML
 
-PROTO_LABELS = {"hy2": "Hysteria2", "vless": "VLESS Reality", "anytls": "AnyTLS"}
+from . import security
+
+PROTO_LABELS = {"hy2": "Hysteria2", "vless": "VLESS Reality", "anytls": "AnyTLS", "trojan": "Trojan", "tuic": "TUIC v5",
+                "ss": "Shadowsocks-2022", "naive": "Naive"}
+SS_METHOD = "2022-blake3-aes-128-gcm"
 FLOW = "xtls-rprx-vision"
 
 
@@ -32,8 +36,11 @@ def protos(s: dict) -> list[str]:
         out.append("hy2")
     if s.get("vless_enabled") and s.get("reality_pub"):
         out.append("vless")
-    if s.get("anytls_enabled") and s.get("anytls_domain"):
-        out.append("anytls")
+    for p in ("anytls", "trojan", "tuic", "naive"):               # TLS-протоколы работают на домене сервера
+        if s.get(f"{p}_enabled") and s.get("anytls_domain"):
+            out.append(p)
+    if s.get("ss_enabled") and s.get("ss_key"):
+        out.append("ss")
     return out
 
 
@@ -59,6 +66,22 @@ def anytls_endpoint(s: dict) -> dict:
     return {"host": dom, "port": int(s["anytls_port"]), "sni": dom, "insecure": bool(s.get("anytls_insecure"))}
 
 
+def ss_endpoint(s: dict) -> dict:
+    host = (s.get("public_host") or "").strip() or s["host"]
+    return {"host": host, "port": int(s["ss_port"]), "method": SS_METHOD}
+
+
+def ss_password(user: dict, s: dict) -> str:
+    """Пароль клиента Shadowsocks-2022 в многопользовательском режиме: «ключ сервера:ключ профиля»."""
+    return f"{security.decrypt(s['ss_key'])}:{user['ss_key']}"
+
+
+def tls_endpoint(s: dict, proto: str) -> dict:
+    """Параметры TLS-протоколов на домене сервера (AnyTLS / Trojan / TUIC): общий домен и сертификат, свой порт."""
+    e = anytls_endpoint(s)
+    return {**e, "port": int(s[f"{proto}_port"])}
+
+
 def profile_name(user: dict, s: dict) -> str:
     return f"{s['name']}-{user['username']}"
 
@@ -79,6 +102,23 @@ def uri(user: dict, s: dict, proto: str = "hy2") -> str:
         e = anytls_endpoint(s)
         q = f"sni={quote(e['sni'], safe='')}" + ("&insecure=1" if e["insecure"] else "")
         return f"anytls://{quote(user['password'], safe='')}@{_fmt_host(e['host'])}:{e['port']}/?{q}#{name}"
+    if proto == "trojan":
+        e = tls_endpoint(s, "trojan")
+        q = f"security=tls&sni={quote(e['sni'], safe='')}&type=tcp" + ("&allowInsecure=1" if e["insecure"] else "")
+        return f"trojan://{quote(user['password'], safe='')}@{_fmt_host(e['host'])}:{e['port']}?{q}#{name}"
+    if proto == "tuic":
+        e = tls_endpoint(s, "tuic")
+        q = (f"congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni={quote(e['sni'], safe='')}"
+             + ("&allow_insecure=1" if e["insecure"] else ""))
+        return f"tuic://{user['uuid']}:{quote(user['password'], safe='')}@{_fmt_host(e['host'])}:{e['port']}?{q}#{name}"
+    if proto == "naive":
+        e = tls_endpoint(s, "naive")
+        return (f"naive+https://{quote(user['username'], safe='')}:{quote(user['password'], safe='')}"
+                f"@{_fmt_host(e['host'])}:{e['port']}#{name}")
+    if proto == "ss":
+        e = ss_endpoint(s)
+        # для AEAD-2022 userinfo — обычный (не base64) «метод:пароль» с процентным кодированием (SIP002)
+        return f"ss://{e['method']}:{quote(ss_password(user, s), safe='')}@{_fmt_host(e['host'])}:{e['port']}#{name}"
     e = endpoint(s)
     auth = quote(user["username"], safe="") + ":" + quote(user["password"], safe="")
     params = []
@@ -158,6 +198,21 @@ def clash_yaml(user: dict, servers: list[dict], template: dict | None = None) ->
                 add(name, {"type": "anytls", "server": e["host"], "port": e["port"], "password": user["password"],
                            "sni": e["sni"], "client-fingerprint": "chrome", "udp": True,
                            "skip-cert-verify": e["insecure"]})
+            elif proto == "trojan":
+                e = tls_endpoint(s, "trojan")
+                add(name, {"type": "trojan", "server": e["host"], "port": e["port"], "password": user["password"],
+                           "sni": e["sni"], "udp": True, "skip-cert-verify": e["insecure"]})
+            elif proto == "tuic":
+                e = tls_endpoint(s, "tuic")
+                add(name, {"type": "tuic", "server": e["host"], "port": e["port"], "uuid": user["uuid"],
+                           "password": user["password"], "alpn": ["h3"], "udp-relay-mode": "native",
+                           "congestion-controller": "bbr", "sni": e["sni"], "skip-cert-verify": e["insecure"]})
+            elif proto == "naive":
+                continue                       # Clash Meta / mihomo не поддерживает Naive
+            elif proto == "ss":
+                e = ss_endpoint(s)
+                add(name, {"type": "ss", "server": e["host"], "port": e["port"], "cipher": e["method"],
+                           "password": ss_password(user, s), "udp": True})
             else:
                 e = endpoint(s)
                 p = {"type": "hysteria2", "server": e["host"], "port": e["port"],

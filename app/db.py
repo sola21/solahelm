@@ -149,6 +149,16 @@ SERVER_COLS = {
     "anytls_cert": "TEXT DEFAULT 'hysteria'",      # hysteria | selfsigned
     "anytls_insecure": "INTEGER DEFAULT 0",
     "auto_assign": "INTEGER DEFAULT 0",           # предлагать сервер новым профилям по умолчанию
+    # дополнительные протоколы sing-box. TLS-протоколы (anytls, trojan, tuic) делят домен и сертификат anytls_domain / anytls_cert
+    "trojan_enabled": "INTEGER DEFAULT 0",
+    "trojan_port": "INTEGER DEFAULT 7443",
+    "tuic_enabled": "INTEGER DEFAULT 0",
+    "tuic_port": "INTEGER DEFAULT 8444",            # UDP
+    "naive_enabled": "INTEGER DEFAULT 0",
+    "naive_port": "INTEGER DEFAULT 6443",
+    "ss_enabled": "INTEGER DEFAULT 0",
+    "ss_port": "INTEGER DEFAULT 2443",
+    "ss_key": "TEXT DEFAULT ''",                   # ключ сервера Shadowsocks-2022 (зашифрован)
 }
 
 
@@ -160,6 +170,11 @@ def _migrate() -> None:
         ex("ALTER TABLE users ADD COLUMN template_id INTEGER")   # NULL = шаблон по умолчанию
     if "uuid" not in cols:
         ex("ALTER TABLE users ADD COLUMN uuid TEXT")
+    if "ss_key" not in cols:
+        ex("ALTER TABLE users ADD COLUMN ss_key TEXT DEFAULT ''")      # ключ профиля для Shadowsocks-2022 (16 байт, base64)
+    import base64, os
+    for r in q("SELECT id FROM users WHERE ss_key IS NULL OR ss_key=''"):
+        ex("UPDATE users SET ss_key=? WHERE id=?", (base64.b64encode(os.urandom(16)).decode(), r["id"]))
     import uuid as _uuid
     for r in q("SELECT id FROM users WHERE uuid IS NULL OR uuid=''"):
         ex("UPDATE users SET uuid=? WHERE id=?", (str(_uuid.uuid4()), r["id"]))

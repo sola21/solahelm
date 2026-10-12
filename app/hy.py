@@ -1,4 +1,5 @@
 """Логика Hysteria2: разбор/правка config.yaml, синхронизация пользователей, мониторинг, установка."""
+import base64
 import hashlib
 import io
 import json
@@ -149,12 +150,17 @@ def placeholder(s: dict) -> dict[str, str]:
     return {PLACEHOLDER_USER: hashlib.sha256(seed.encode()).hexdigest()[:32]}
 
 
+def new_ss_key() -> str:
+    """Ключ Shadowsocks-2022 (aes-128): 16 случайных байт в base64."""
+    return base64.b64encode(secrets.token_bytes(16)).decode()
+
+
 def create_user(username: str, password: str, note: str = "", **kw) -> int:
     return db.ex(
-        "INSERT INTO users(username,password,enabled,active,expires_at,traffic_limit,sub_token,note,created,uuid) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO users(username,password,enabled,active,expires_at,traffic_limit,sub_token,note,created,uuid,ss_key) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (username, password, kw.get("enabled", 1), 1, kw.get("expires_at", 0), kw.get("traffic_limit", 0),
-         secrets.token_urlsafe(24), note, int(time.time()), str(uuid.uuid4())))
+         secrets.token_urlsafe(24), note, int(time.time()), str(uuid.uuid4()), new_ss_key()))
 
 
 def mark_dirty(server_ids) -> None:

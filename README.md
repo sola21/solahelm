@@ -1,6 +1,6 @@
 # SolaHelm
 
-Self-hosted web panel for managing **Hysteria2** servers — and **VLESS (Reality)** / **AnyTLS** via sing-box on the same
+Self-hosted web panel for managing **Hysteria2** servers — and **VLESS (Reality)**, **AnyTLS**, **Trojan**, **TUIC v5** and **Shadowsocks-2022** via sing-box on the same
 servers — from one place. Create client profiles, hand out links / QR codes / subscriptions, watch server health,
 and let your users open a personal cabinet with their own connections.
 
@@ -26,10 +26,10 @@ Bilingual interface (**English / Русский**) with a language switch on eve
 - **Many VPS from one panel.** Add servers by SSH (panel key, password or your own key), see service state, version,
   uptime, CPU / RAM / disk, network speed. Start / stop / restart, journal, config editor with backup and automatic rollback.
 - **One-click install on a clean Debian/Ubuntu VPS:** Hysteria2 (ACME certificate, masquerade site, `userpass` auth,
-  traffic stats API, ufw) and/or sing-box with VLESS Reality + AnyTLS. Live install log.
+  traffic stats API, ufw) and/or sing-box with VLESS Reality, AnyTLS, Trojan, TUIC v5 and Shadowsocks-2022 (fallback protocols if one gets blocked). Live install log.
 - **Profiles:** create / edit / disable / delete, expiry date, traffic limit, per-profile access to chosen servers
   (matrix page "Access"). Changes are pushed to server configs automatically, with verification and rollback.
-- **Client artifacts:** `hysteria2://`, `vless://`, `anytls://` links, QR codes (SVG / PNG), Hysteria YAML,
+- **Client artifacts:** `hysteria2://`, `vless://`, `anytls://`, `trojan://`, `tuic://`, `ss://` links, QR codes (SVG / PNG), Hysteria YAML,
   Clash Meta / mihomo YAML, and a **subscription URL** (base64 and Clash format) with traffic/expiry headers.
 - **Routing templates** for Clash/mihomo (DNS, TUN, rule providers, rules). Upload any ready-made mihomo config;
   the panel keeps routing and injects your servers. Two presets included.
@@ -54,7 +54,7 @@ Browser ──HTTPS──► nginx ──HTTP──► SolaHelm (127.0.0.1:8088,
 ```
 
 The panel is the **source of truth** for users: it rewrites the `auth.userpass` section of Hysteria's `config.yaml`
-and the `vless-in` / `anytls-in` inbounds of sing-box (everything else is left alone), keeps timestamped backups
+and the `vless-in` / `anytls-in` / `trojan-in` / `tuic-in` / `ss-in` inbounds of sing-box (everything else is left alone), keeps timestamped backups
 and restarts the service only when something changed.
 
 ## Requirements
@@ -149,7 +149,7 @@ simply stays in Russian. Adding another language means adding another dictionary
 3. **Check**. If Hysteria2 is already running there: **Import profiles from server**, then **Sync**.
    On a clean VPS use the **Install** block (needs a domain with an A record pointing to the VPS and an e-mail for ACME).
 
-Hysteria2 listens on UDP 443 and (masquerade + ACME) TCP 443/80, so VLESS and AnyTLS default to TCP 8443 / 9443.
+Hysteria2 listens on UDP 443 and (masquerade + ACME) TCP 443/80, so the other protocols default to VLESS 8443, AnyTLS 9443, Trojan 7443, TUIC 8444 (UDP), Shadowsocks 2443.
 
 ## Configuration (`.env`)
 
@@ -174,7 +174,7 @@ See [`.env.example`](.env.example). The most important keys:
   keep it patched, expose only nginx, restrict the admin path by IP, use HTTPS only.
 - Everything sensitive is in `data/` (`panel.db`, `secret.key`, `panel_ed25519`). **Back it up and never publish it.**
   Without `secret.key` stored SSH passwords cannot be decrypted.
-- Traffic accounting and "online" are only available for Hysteria2 (its stats API); VLESS/AnyTLS get state only.
+- Traffic accounting and "online" are only available for Hysteria2 (its stats API); the other protocols get state only.
 - If your reverse proxy hides the real client IP (e.g. NAT / port-proxy), login throttling sees one shared address.
 - Found a vulnerability? See [SECURITY.md](SECURITY.md).
 

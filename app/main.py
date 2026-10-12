@@ -504,7 +504,7 @@ async def server_user_remove(request: Request, sid: int, uid: int, sess: dict = 
 async def access_page(request: Request, sess: dict = Depends(session_dep)):
     users = db.q("SELECT u.id, u.username, u.note, u.enabled, u.expires_at, u.traffic_limit, u.tx, u.rx, "
                  "c.login AS owner FROM users u LEFT JOIN clients c ON c.id=u.client_id ORDER BY u.username")
-    servers = db.q("SELECT id, name, enabled, hy2_enabled, vless_enabled, anytls_enabled, auto_assign, dirty, sync_error "
+    servers = db.q("SELECT id, name, enabled, hy2_enabled, vless_enabled, anytls_enabled, trojan_enabled, tuic_enabled, ss_enabled, naive_enabled, auto_assign, dirty, sync_error "
                    "FROM servers ORDER BY name")
     linked = {f"{r['user_id']}:{r['server_id']}" for r in db.q("SELECT user_id, server_id FROM user_servers")}
     return render(request, "access.html", sess, nav="access", users=users, servers=servers, linked=linked)
@@ -717,32 +717,31 @@ async def api_provision_sb(request: Request, sid: int, sess: dict = Depends(csrf
     s = db.q1("SELECT * FROM servers WHERE id=?", (sid,))
     if not s:
         return jerr("Сервер не найден", 404)
-    opts = {"vless": bool(b.get("vless")), "anytls": bool(b.get("anytls")), "ufw": bool(b.get("ufw")),
-            "assign_all": bool(b.get("assign_all")),
-            "vless_port": _int(b.get("vless_port", 8443), 1, 65535, 0),
-            "anytls_port": _int(b.get("anytls_port", 9443), 1, 65535, 0),
+    opts = {"ufw": bool(b.get("ufw")), "assign_all": bool(b.get("assign_all")),
             "reality_sni": str(b.get("reality_sni", "")).strip().lower(),
             "anytls_domain": str(b.get("anytls_domain", "")).strip().lower(),
             "anytls_cert": "selfsigned" if b.get("anytls_cert") == "selfsigned" else "hysteria"}
-    if not (opts["vless"] or opts["anytls"]):
+    for p in sb.PROTOCOLS:
+        opts[p] = bool(b.get(p))
+        opts[p + "_port"] = _int(b.get(p + "_port", sb.DEFAULT_PORTS[p]), 1, 65535, 0)
+    chosen = [p for p in sb.PROTOCOLS if opts[p]]
+    if not chosen:
         return jerr("Выберите хотя бы один протокол")
-    if opts["vless"]:
-        if not opts["vless_port"]:
-            return jerr("Некорректный порт VLESS")
-        if not sb.DOMAIN_RE.match(opts["reality_sni"]):
-            return jerr("Укажите домен для маскировки Reality (например www.microsoft.com)")
-    if opts["anytls"]:
-        if not opts["anytls_port"]:
-            return jerr("Некорректный порт AnyTLS")
-        if not sb.DOMAIN_RE.match(opts["anytls_domain"]):
-            return jerr("Укажите домен AnyTLS (A-запись должна указывать на этот сервер)")
-    if opts["vless"] and opts["anytls"] and opts["vless_port"] == opts["anytls_port"]:
-        return jerr("Порты VLESS и AnyTLS должны различаться")
+    for p in chosen:
+        if not opts[p + "_port"]:
+            return jerr(f"Некорректный порт {sb.NAMES[p]}")
+    if opts["vless"] and not sb.DOMAIN_RE.match(opts["reality_sni"]):
+        return jerr("Укажите домен для маскировки Reality (например www.microsoft.com)")
+    if any(opts[p] for p in sb.TLS_PROTOS) and not sb.DOMAIN_RE.match(opts["anytls_domain"]):
+        return jerr("Укажите домен сервера для TLS-протоколов (A-запись должна указывать на этот сервер)")
+    ports = [opts[p + "_port"] for p in chosen]
+    if len(set(ports)) != len(ports):
+        return jerr("Порты протоколов должны различаться")
     if s["hy2_enabled"]:
         # Hysteria2 по инструкции занимает TCP 443 (заглушка HTTPS) и TCP 80 (ACME)
-        for name, key in (("VLESS", "vless"), ("AnyTLS", "anytls")):
-            if opts[key] and opts[key + "_port"] in (80, 443):
-                return jerr(f"Порт {name} {opts[key + '_port']} занят Hysteria2 — выберите другой, например 8443")
+        for p in chosen:
+            if opts[p + "_port"] in (80, 443):
+                return jerr(f"Порт {sb.NAMES[p]} {opts[p + '_port']} занят Hysteria2 — выберите другой, например 8443")
     audit(request, "server.provision_sb", f"id={sid} {json.dumps(opts)}")
     jid = worker.run_job("sing-box", sid, lambda log: sb.provision(sid, opts, log))
     return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
@@ -798,6 +797,10 @@ def parse_user_form(form, existing: dict | None) -> tuple[dict, list[int], list[
             errs.append("Такой логин уже существует")
     if not PW_RE.match(d["password"]):
         errs.append("Пароль: 6–128 печатных ASCII-символов без пробелов")
+    else:
+        same = db.q1("SELECT id FROM users WHERE password=?", (d["password"],))
+        if same and (not existing or same["id"] != existing["id"]):
+            errs.append("Такой пароль уже используется другим профилем (Trojan и AnyTLS узнают пользователя только по паролю)")
     exp = g("expires")
     if exp:
         try:
@@ -949,7 +952,8 @@ async def user_action(request: Request, uid: int, act: str, sess: dict = Depends
         msg = "Профиль отключён" if u["enabled"] else "Профиль включён"
     elif act == "regen-password":
         # меняем все учётные данные: пароль (Hysteria2, AnyTLS) и UUID (VLESS)
-        db.ex("UPDATE users SET password=?, uuid=? WHERE id=?", (security.gen_password(), str(uuid.uuid4()), uid))
+        db.ex("UPDATE users SET password=?, uuid=?, ss_key=? WHERE id=?",
+              (security.gen_password(), str(uuid.uuid4()), hy.new_ss_key(), uid))
         hy.mark_dirty(sids)
         msg = "Новый пароль сгенерирован — старые ссылки больше не работают"
     elif act == "reset-traffic":
