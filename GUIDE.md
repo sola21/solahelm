@@ -88,7 +88,8 @@ In the server card open the **Install** block:
 - domain: `vps1.mooo.com` (A record to this VPS, step 1; without it the certificate cannot be issued, and port 80
   must be free on the VPS);
 - e-mail for the certificate: yours;
-- pick Hysteria2 and/or sing-box (VLESS Reality + AnyTLS).
+- pick Hysteria2 and/or sing-box protocols: VLESS Reality, AnyTLS, Trojan, TUIC v5, Shadowsocks-2022, Naive — each one is enabled
+  separately and has its own port (open these ports on the VPS firewall). Several protocols = spare channels if one gets blocked.
 
 Press Install and watch the live log. If Hysteria2 is already running there: **Import profiles from server**, then **Sync**.
 
@@ -96,7 +97,8 @@ Press Install and watch the live log. If Hysteria2 is already running there: **I
 
 1. **Profiles → create**: name `ivan`, expiry (e.g. one month), traffic limit (optional).
 2. **Access** page: tick which servers the profile may use.
-3. The panel pushes the changes to the servers itself. Open the profile: `hysteria2://`, `vless://`, `anytls://` links,
+3. The panel pushes the changes to the servers itself. Open the profile: `hysteria2://`, `vless://`, `anytls://`, `trojan://`, `tuic://`, `ss://`, `naive+https://` links
+   (only for the protocols enabled on the server),
    QR code, Clash config and the **subscription link** are there.
 
 ## Step 8. Connect the client
