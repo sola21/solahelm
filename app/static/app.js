@@ -14,6 +14,12 @@
   const T = (s) => (I18N_RX && typeof s === "string" ? s.replace(I18N_RX, (m) => I18N[m.replace(/\s+/g, " ")] || m) : s);
   const ask = (m) => window.confirm(T(m));
 
+  // на узком экране меню прокручивается вбок — показать текущий раздел
+  const navOn = $(".top nav a.on");
+  if (navOn && navOn.parentNode.scrollWidth > navOn.parentNode.clientWidth)
+    navOn.parentNode.scrollLeft += navOn.getBoundingClientRect().left - navOn.parentNode.getBoundingClientRect().left
+      - (navOn.parentNode.clientWidth - navOn.offsetWidth) / 2;
+
   let toastTimer;
   function toast(msg, isErr) {
     const t = $("#toast");

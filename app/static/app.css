@@ -155,7 +155,16 @@ details>summary{cursor:pointer;color:var(--accent);margin:4px 0 8px}
 details.card>summary{color:var(--text)}
 .howto ol{margin:6px 0 12px;padding-left:20px}.howto li{margin-bottom:4px}
 
+/* узкий экран (телефон, планшет): шапка в две строки — логотип и «Выйти» сверху, меню одной строкой с прокруткой вбок */
+@media (max-width:900px){
+  .top{position:static;gap:8px 12px;padding:8px 16px}
+  .top .logout{margin-left:auto;gap:8px}
+  .top nav{order:3;flex:1 0 100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px}
+  .top nav::-webkit-scrollbar{display:none}
+  .top nav:empty{display:none}
+  .top nav a{flex:none;white-space:nowrap}
+}
 @media (max-width:640px){
-  .wrap{padding:16px}.top{padding:10px 16px;gap:10px}
+  .wrap{padding:16px}
   .cols{grid-template-columns:1fr}.tbl th,.tbl td{padding:8px 10px}
 }
