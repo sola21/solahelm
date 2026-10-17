@@ -122,6 +122,59 @@
   </div>
 </section>
 
+<section class="card" id="guard">
+  <h3>Защита SSH</h3>
+  <p class="small muted">Боты круглосуточно подбирают пароли к SSH на любом VPS. Здесь можно поставить fail2ban (банит IP после нескольких неудачных
+    попыток входа) и запретить вход по паролю, оставив только ключи. IP, с которого подключается панель, fail2ban не банит никогда.</p>
+  {% if guard %}
+  <dl class="kv">
+    <dt>fail2ban</dt><dd>{% if guard.jail %}<span class="badge ok">защищает SSH</span> · сейчас в бане: <b>{{ guard.banned_now }}</b> · всего забанено: {{ guard.banned_total }}{% elif guard.f2b_installed %}<span class="badge warn">установлен, но jail sshd не работает</span>{% else %}<span class="badge err">не установлен</span>{% endif %}</dd>
+    <dt>Неудачных входов за сутки</dt><dd>{{ guard.failed_24h }}</dd>
+    <dt>Вход по паролю</dt><dd>{% if guard.password_auth == 'no' %}<span class="badge ok">запрещён</span>{% else %}<span class="badge warn">разрешён</span>{% endif %}{% if guard.dropin %} <span class="small muted">(настроено панелью)</span>{% endif %}</dd>
+    <dt>Вход root</dt><dd class="mono">{{ guard.root_login or '—' }}</dd>
+    <dt>Порт SSH</dt><dd class="mono">{{ guard.ssh_port or '—' }}</dd>
+    <dt>Панель подключается с</dt><dd class="mono">{{ guard.client_ip or '—' }}</dd>
+    <dt>Проверено</dt><dd>{{ guard.ts|ago }}</dd>
+  </dl>
+  {% if guard.banned %}
+  <details class="mt"><summary>Забаненные IP ({{ guard.banned|length }})</summary>
+    <table class="tbl">
+      {% for ip in guard.banned %}<tr><td class="mono">{{ ip }}</td><td class="r"><button class="btn sm" data-unban="/api/servers/{{ s.id }}/guard/unban" data-ip="{{ ip }}">Разбанить</button></td></tr>{% endfor %}
+    </table>
+  </details>
+  {% endif %}
+  {% else %}<p class="muted small">Состояние ещё не проверялось.</p>{% endif %}
+  <div class="btns"><button class="btn" data-api="/api/servers/{{ s.id }}/guard" data-reload="300">Проверить состояние</button></div>
+
+  <form id="guard-f2b" class="form mt" data-persist="guard-{{ s.id }}" data-url="/api/servers/{{ s.id }}/guard/fail2ban">
+    <fieldset>
+      <legend>fail2ban</legend>
+      <div class="row">
+        <label>Неудачных попыток<input name="maxretry" type="number" min="1" max="100" value="5"></label>
+        <label>За сколько минут<input name="findtime" type="number" min="1" max="1440" value="10"></label>
+        <label>Бан, минут<input name="bantime" type="number" min="1" max="10080" value="60"><small>повторным нарушителям срок удваивается, до недели</small></label>
+      </div>
+      <label>Никогда не банить (IP или сети через пробел)<input name="ignore" value="{{ s.f2b_ignore or '' }}" placeholder="203.0.113.7 198.51.100.0/24"><small>IP панели добавляется сам; впишите сюда свой домашний или рабочий адрес</small></label>
+      <div class="btns"><button class="btn primary">{{ 'Обновить настройки fail2ban' if guard and guard.jail else 'Установить fail2ban' }}</button></div>
+    </fieldset>
+  </form>
+
+  <form id="guard-pw" class="form" data-url="/api/servers/{{ s.id }}/guard/password">
+    <fieldset>
+      <legend>Вход по паролю</legend>
+      <p class="small muted">После запрета войти на сервер по SSH можно будет только по ключу — и панели, и вам. Если вы сами заходите по паролю,
+        сначала вставьте ниже свой публичный ключ (файл <code>id_ed25519.pub</code>), он добавится в authorized_keys пользователя {{ s.ssh_user }}.
+        Панель проверяет, что после изменения может войти заново, иначе откатывает настройку. Консоль VPS у хостера по паролю работать продолжит.</p>
+      <label>Ваш публичный SSH-ключ (необязательно)<textarea name="key" rows="2" class="mono" spellcheck="false" placeholder="ssh-ed25519 AAAA… user@pc"></textarea></label>
+      {% if s.ssh_auth == 'password' %}<p class="small"><span class="badge warn">панель входит по паролю</span> Сначала нажмите «Установить ключ панели» в блоке «Действия».</p>{% endif %}
+      <div class="btns">
+        <button type="button" class="btn primary" data-allow="0" {{ 'disabled' if s.ssh_auth == 'password' }}>Запретить вход по паролю</button>
+        <button type="button" class="btn ghost" data-allow="1">Разрешить вход по паролю</button>
+      </div>
+    </fieldset>
+  </form>
+</section>
+
 <section class="card">
   <h3>Установка / переустановка Hysteria2</h3>
   <p class="small muted">Выполняет шаги вашей инструкции на чистом Debian/Ubuntu: обновляет систему, запускает get.hy2.sh, создаёт сайт-заглушку, пишет config.yaml (ACME, userpass, masquerade, trafficStats), настраивает ufw и запускает службу. Текущий конфиг сохраняется в бэкап. Перед запуском A-запись домена должна указывать на IP сервера.</p>

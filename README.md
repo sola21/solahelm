@@ -40,6 +40,8 @@ Bilingual interface (**English / Русский**) with a language switch on eve
   admin area isolated on its own prefix (and its own cookie path).
 - **Security:** scrypt password hashes, server-side sessions, CSRF tokens, login throttling, CSP, audit log,
   encrypted SSH secrets, SSH host-key pinning.
+- **SSH protection for VPS:** one-click fail2ban (bans after failed logins, the panel IP is never banned, ban list with Unban),
+  disabling password login with a re-login check and automatic rollback, failed-login counter for the last 24 h.
 
 ## How it works
 

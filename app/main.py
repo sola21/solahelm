@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import clients, db, hy, routing, security, ssh
+from . import clients, db, guard, hy, routing, security, ssh
 from .i18n import LANG_COOKIE, LANGS, detect_lang, get_lang, js_bundle, reset_lang, set_lang, tr, tr_html
 from .config import (ADMIN_BASE as ABASE, APP_DIR, BASE_PATH as BASE, BRAND, COOKIE_SECURE, DEFAULT_LANG, LEGACY_ADMIN_REDIRECT,
                      LEGACY_BASES, POLL_INTERVAL, PUBLIC_URL, SESSION_HOURS, TRUSTED_PROXIES)
@@ -449,7 +449,7 @@ async def server_page(request: Request, sid: int, sess: dict = Depends(session_d
     linked = {u["id"] for u in users}
     linkable = [u for u in db.q("SELECT id, username, note FROM users ORDER BY username") if u["id"] not in linked]
     return render(request, "server.html", sess, nav="servers", s=s, users=users, jobs=jobs,
-                  linkable=linkable, drift=_drift(s),
+                  linkable=linkable, drift=_drift(s), guard=guard.cached(s),
                   hostkey_fp=ssh.host_key_fingerprint(s["host_key"]), pubkey=ssh.panel_pubkey(),
                   endpoint=clients.endpoint(s), hist=hy.history(sid, request.query_params.get("range", "24h")),
                   fail_threshold=hy.fail_threshold(), poll_interval=db.get_setting("poll_interval", POLL_INTERVAL))
@@ -752,6 +752,51 @@ async def api_update_core(request: Request, sid: int, sess: dict = Depends(csrf_
     audit(request, "server.update_core", f"id={sid}")
     jid = worker.run_job("update", sid, lambda log: hy.update_core(sid, log))
     return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
+
+
+# ---------------- защита SSH (fail2ban, вход по паролю) ----------------
+@r.post("/api/servers/{sid}/guard")
+async def api_guard_status(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    ok, res = await call(guard.status, sid)
+    return jok(guard=res) if ok else jerr(res)
+
+
+@r.post("/api/servers/{sid}/guard/fail2ban")
+async def api_guard_f2b(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    b = await request.json()
+    if not db.q1("SELECT 1 FROM servers WHERE id=?", (sid,)):
+        return jerr("Сервер не найден", 404)
+    try:
+        opts = {"maxretry": _int(b.get("maxretry"), 1, 100, guard.DEFAULTS["maxretry"]),
+                "findtime": _int(b.get("findtime"), 1, 1440, guard.DEFAULTS["findtime"]),
+                "bantime": _int(b.get("bantime"), 1, 10080, guard.DEFAULTS["bantime"]),
+                "ignore": guard.parse_ignore(str(b.get("ignore") or ""))}
+    except hy.HyError as e:
+        return jerr(str(e))
+    audit(request, "server.guard.fail2ban", f"id={sid} {json.dumps(opts)}")
+    jid = worker.run_job("fail2ban", sid, lambda log: guard.install_fail2ban(sid, opts, log))
+    return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
+
+
+@r.post("/api/servers/{sid}/guard/unban")
+async def api_guard_unban(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    b = await request.json()
+    ok, res = await call(guard.unban, sid, str(b.get("ip") or ""))
+    audit(request, "server.guard.unban", f"id={sid} {b.get('ip')} {'ok' if ok else res[:200]}")
+    return jok(msg=f"{res} разбанен") if ok else jerr(res)
+
+
+@r.post("/api/servers/{sid}/guard/password")
+async def api_guard_password(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    b = await request.json()
+    allow = bool(b.get("allow"))
+    ok, res = await call(guard.set_password_login, sid, allow, str(b.get("key") or ""))
+    audit(request, "server.guard.password", f"id={sid} allow={allow} {'ok' if ok else res[:200]}")
+    if not ok:
+        return jerr(res)
+    msg = (f"Вход по паролю {'разрешён' if allow else 'запрещён'}. "
+           f"PasswordAuthentication: {res['password_auth']}, PermitRootLogin: {res['root_login']}.")
+    return jok(msg=msg)
 
 
 @r.post("/api/poll-all")

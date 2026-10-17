@@ -159,6 +159,8 @@ SERVER_COLS = {
     "ss_enabled": "INTEGER DEFAULT 0",
     "ss_port": "INTEGER DEFAULT 2443",
     "ss_key": "TEXT DEFAULT ''",                   # ключ сервера Shadowsocks-2022 (зашифрован)
+    "f2b_ignore": "TEXT DEFAULT ''",               # защита SSH: доп. IP/сети, которые fail2ban не банит
+    "guard_cache": "TEXT DEFAULT ''",              # защита SSH: последнее полученное состояние (JSON)
 }
 
 

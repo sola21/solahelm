@@ -291,6 +291,52 @@
     });
   }
 
+  // ---- защита SSH ----
+  const gF2b = $("#guard-f2b");
+  if (gF2b) {
+    gF2b.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!ask("Установить или обновить fail2ban на сервере? Будет создан /etc/fail2ban/jail.d/solahelm.local, служба перезапустится.")) return;
+      const fd = new FormData(gF2b);
+      const body = { maxretry: +fd.get("maxretry"), findtime: +fd.get("findtime"), bantime: +fd.get("bantime"), ignore: fd.get("ignore") };
+      busy(gF2b.querySelector("button"), async () => {
+        const d = await api(gF2b.dataset.url, { body });
+        if (d.ok) location.href = d.url; else out(d.error, true);
+      });
+    });
+  }
+  const gPw = $("#guard-pw");
+  if (gPw) {
+    $$("[data-allow]", gPw).forEach((b) =>
+      b.addEventListener("click", () => {
+        const allow = b.dataset.allow === "1";
+        const msg = allow
+          ? "Снова разрешить вход по паролю на этом сервере?"
+          : "Запретить вход по SSH по паролю? Войти можно будет только по ключу. Если вы заходите сами по паролю — сначала вставьте свой публичный ключ.";
+        if (!ask(msg)) return;
+        busy(b, async () => {
+          const d = await api(gPw.dataset.url, { body: { allow, key: gPw.querySelector("[name=key]").value } });
+          out(d.ok ? d.msg : d.error, !d.ok);
+          if (d.ok) {
+            try { sessionStorage.setItem("hy2flash", JSON.stringify({ text: d.msg, err: false })); } catch {}
+            const g = $("#guard [data-api]");
+            if (g) setTimeout(() => g.click(), 300);
+          }
+        });
+      })
+    );
+  }
+  $$("[data-unban]").forEach((b) =>
+    b.addEventListener("click", () => {
+      if (!ask("Разбанить " + b.dataset.ip + "?")) return;
+      busy(b, async () => {
+        const d = await api(b.dataset.unban, { body: { ip: b.dataset.ip } });
+        toast(d.ok ? d.msg : d.error, !d.ok);
+        if (d.ok) b.closest("tr").remove();
+      });
+    })
+  );
+
   // ---- отключение клиента ----
   $$("[data-kick]").forEach((b) =>
     b.addEventListener("click", () => {
