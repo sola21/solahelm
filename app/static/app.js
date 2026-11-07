@@ -286,7 +286,7 @@
         ufw: fd.has("ufw"), assign_all: fd.has("assign_all"),
         reality_sni: fd.get("reality_sni"), anytls_domain: fd.get("anytls_domain"), anytls_cert: fd.get("anytls_cert"),
       };
-      for (const p of ["vless", "anytls", "trojan", "tuic", "ss", "naive"]) {
+      for (const p of ["vless", "vgrpc", "anytls", "trojan", "tuic", "ss", "naive", "masque"]) {
         body[p] = fd.has(p);
         body[p + "_port"] = +fd.get(p + "_port");
       }

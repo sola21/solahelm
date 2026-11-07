@@ -810,4 +810,5 @@ EN: dict[str, str] = {
     "— Android, Windows, macOS, Linux (для них — вторая ссылка подписки, Clash; Naive и MASQUE в Clash нет)": "— Android, Windows, macOS, Linux (use the second, Clash subscription link; Clash has no Naive or MASQUE)",
     "— Android, iOS, Windows, macOS, Linux; понимает почти все протоколы, кроме MASQUE": "— Android, iOS, Windows, macOS, Linux; supports almost all protocols except MASQUE",
     "→ Import и выберите скачанный JSON.": "→ Import and choose the downloaded JSON.",
+    "); понимает и обычную подписку, и Clash": "); supports both the regular and the Clash subscription",
 }
