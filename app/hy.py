@@ -16,6 +16,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from . import db
+from .masq import ROUTER_HTML as MASQ_HTML
 from .ssh import Conn, SSHError
 
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,31}$")
@@ -591,7 +592,16 @@ def sh_echo(msg: str) -> str:
 RUN_SCRIPT = 'f=$(mktemp); cat > "$f"; bash "$f" </dev/null; rc=$?; rm -f "$f"; exit $rc'
 HY_INSTALL = "bash <(curl -fsSL https://get.hy2.sh/)"
 UPDATE_SCRIPT = f"set -e\n{HY_INSTALL}\nhysteria version | head -n 3\n"
-MASQ_HTML = """<!DOCTYPE html><html><head><meta charset="utf-8"><title>Please wait</title><style>body{background:#0b0b0b;height:100vh;margin:0;display:flex;align-items:center;justify-content:center;font-family:sans-serif;color:#666;letter-spacing:2px}</style></head><body>LOADING…</body></html>"""
+
+
+def set_masq(sid: int) -> None:
+    """Заменить сайт-заглушку на сервере (страница входа в роутер). Служба перезапускать не нужно: файл читается при запросах."""
+    s = get_server(sid)
+    with Conn(s) as c:
+        c.write_file("/var/www/masq/index.html", MASQ_HTML, backup=False)
+        code, out, err = c.run("chmod -R a+rX /var/www/masq")
+        if code != 0:
+            raise HyError(f"Не удалось выставить права: {(err or out).strip()}")
 
 
 def build_server_config(domain: str, email: str, port: int, users: dict, stats: tuple[int, str] | None,

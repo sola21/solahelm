@@ -679,6 +679,13 @@ async def api_install_key(request: Request, sid: int, sess: dict = Depends(csrf_
     return jok(msg="Ключ панели установлен, вход по паролю отключён в панели") if ok else jerr(res)
 
 
+@r.post("/api/servers/{sid}/masq")
+async def api_masq(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    ok, res = await call(hy.set_masq, sid)
+    audit(request, "server.masq", f"id={sid} {'ok' if ok else res[:200]}")
+    return jok(msg="Сайт-заглушка заменена: страница входа в роутер") if ok else jerr(res)
+
+
 @r.post("/api/servers/{sid}/kick")
 async def api_kick(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
     body = await request.json()

@@ -107,6 +107,7 @@
     <button class="btn" data-config="/api/servers/{{ s.id }}/sbconfig" data-save="/api/servers/{{ s.id }}/sbconfig" data-title="sing-box (VLESS / AnyTLS): {{ s.sb_config_path }}">Конфиг VLESS / AnyTLS (JSON)</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=sb" data-confirm="Восстановить предыдущий конфиг sing-box из последнего бэкапа и перезапустить службу?">Откатить sing-box</button>
     {% endif %}
+    <button class="btn" data-api="/api/servers/{{ s.id }}/masq" data-confirm="Заменить сайт-заглушку на сервере страницей входа в роутер? Прежний файл index.html будет перезаписан.">Обновить заглушку</button>
     <button class="btn" data-job="/api/servers/{{ s.id }}/update-core" data-confirm="Обновить Hysteria2 до последней версии (get.hy2.sh) и перезапустить?">Обновить Hysteria</button>
     {% if s.ssh_auth == 'password' %}<button class="btn" data-api="/api/servers/{{ s.id }}/install-key" data-confirm="Добавить ключ панели в authorized_keys и перейти на вход по ключу?" data-reload="1500">Установить ключ панели</button>{% endif %}
     {% if s.host_key %}<button class="btn ghost" data-api="/api/servers/{{ s.id }}/reset-hostkey" data-confirm="Сбросить сохранённый ключ хоста? Делайте это только если VPS переустановлен." data-reload="800">Сбросить ключ хоста</button>{% endif %}

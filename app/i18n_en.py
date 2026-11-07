@@ -724,4 +724,8 @@ EN: dict[str, str] = {
     "панель входит по паролю": "panel logs in with a password",
     "повторным нарушителям срок удваивается, до недели": "doubles for repeat offenders, up to a week",
     "установлен, но jail sshd не работает": "installed, but the sshd jail is not running",
+    "Заменить сайт-заглушку на сервере страницей входа в роутер? Прежний файл index.html будет перезаписан.": "Replace the stub website on the server with a router login page? The existing index.html will be overwritten.",
+    "Не удалось выставить права:": "Failed to set permissions:",
+    "Обновить заглушку": "Update stub page",
+    "Сайт-заглушка заменена: страница входа в роутер": "Stub website replaced: router login page",
 }
