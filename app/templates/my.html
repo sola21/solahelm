@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import user_badge, bar, conn_links, client_apps %}
+{% from "_macros.html" import user_badge, bar, conn_links, client_apps, sb_sub_links %}
 {% block title %}Мои подключения{% endblock %}
 {% block content %}
 <div class="head"><h1>Мои подключения</h1></div>
@@ -37,21 +37,20 @@
       <div class="qrwrap">{{ u.sub_qr|safe }}</div>
       <div class="copyline"><code id="sub{{ u.id }}">{{ u.sub_url }}</code><button class="btn sm primary" data-copy="#sub{{ u.id }}">Копировать</button></div>
       <div class="copyline"><code id="subc{{ u.id }}">{{ u.sub_url }}/clash</code><button class="btn sm" data-copy="#subc{{ u.id }}">Копировать</button></div>
-      <p class="small muted">Вторая ссылка — для Clash Verge / FlClash.</p>
+      {{ sb_sub_links(u.sub_url, u.has_masque, u.id) }}
       <div class="btns"><a class="btn sm" href="{{ pub }}/clash/{{ u.id }}.yaml">Скачать Clash YAML</a></div>
     </div>
   </div>
 
   {% if u.conns %}
-  <h3 class="mt">Серверы</h3>
-  <div class="grid wide">
+  <h3 class="mt">Серверы по отдельности</h3>
+  <p class="small muted">Обычно хватает подписки выше. Ссылки и QR отдельных серверов — если нужно добавить только один сервер или протокол: нажмите на сервер, чтобы раскрыть.</p>
   {% for s in u.conns %}
-    <div class="card conn inner">
-      <div class="srv-head"><b>{{ s.name }}</b></div>
+    <details class="card conn inner srv-fold">
+      <summary><b>{{ s.name }}</b> <span class="small muted">· протоколов: {{ s.links|length }} ({{ s.links|map(attribute='label')|join(', ') }})</span></summary>
       {{ conn_links(s.links, u.id, s.id, 'my', u.sub_url) }}
-    </div>
+    </details>
   {% endfor %}
-  </div>
   {% else %}
   <p class="muted">К профилю пока не подключены серверы.</p>
   {% endif %}

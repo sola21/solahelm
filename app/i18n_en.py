@@ -811,4 +811,13 @@ EN: dict[str, str] = {
     "— Android, iOS, Windows, macOS, Linux; понимает почти все протоколы, кроме MASQUE": "— Android, iOS, Windows, macOS, Linux; supports almost all protocols except MASQUE",
     "→ Import и выберите скачанный JSON.": "→ Import and choose the downloaded JSON.",
     "); понимает и обычную подписку, и Clash": "); supports both the regular and the Clash subscription",
+    "(профиль типа «Удалённый»: все серверы и протоколы, автовыбор лучшего)": "app (a “Remote” profile: all servers and protocols, best one picked automatically)",
+    ", четвёртая — то же вместе с MASQUE (только sing-box 1.15+)": ", the fourth is the same plus MASQUE (sing-box 1.15+ only)",
+    "· протоколов:": "· protocols:",
+    "· трафик здесь:": "· traffic here:",
+    "Обычно хватает подписки выше. Ссылки и QR отдельных серверов — если нужно добавить только один сервер или протокол: нажмите на сервер, чтобы раскрыть.": "The subscription above is usually enough. Links and QR codes of individual servers are for adding a single server or protocol: click a server to expand it.",
+    "Приложения (ссылки на загрузку)": "Apps (download links)",
+    "Серверы по отдельности": "Individual servers",
+    "Ссылки выше: первая — обычная (Hiddify, v2rayN, v2rayNG, Streisand, V2Box, Karing, NekoBox), вторая — Clash (Clash Verge, FlClash), третья — для приложения": "Links above: the first is the regular one (Hiddify, v2rayN, v2rayNG, Streisand, V2Box, Karing, NekoBox), the second is Clash (Clash Verge, FlClash), the third is for the",
+    "Страница сервера →": "Server page →",
 }

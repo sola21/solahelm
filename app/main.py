@@ -975,6 +975,7 @@ async def user_page(request: Request, uid: int, sess: dict = Depends(session_dep
     owner = db.q1("SELECT id, login, name FROM clients WHERE id=?", (u["client_id"],)) if u["client_id"] else None
     tpl = routing.template_for(u)
     return render(request, "user.html", sess, nav="users", u=u, servers=servers, sub_url=sub_url, owner=owner,
+                  has_masque=clients.has_masque(servers),
                   tpl=tpl, tpl_own=bool(u["template_id"]),
                   sub_qr=clients.qr_svg(sub_url), daily=list(reversed(daily)),
                   daily_max=max([d["tx"] + d["rx"] for d in daily] or [0]))
@@ -1149,6 +1150,15 @@ async def sub(request: Request, token: str):
 async def sub_clash(request: Request, token: str):
     u, servers = _sub_user(token)
     return PlainTextResponse(clients.clash_yaml(u, servers, routing.template_for(u)), media_type="text/yaml; charset=utf-8",
+                             headers=clients.sub_headers(u))
+
+
+@pr.get("/sub/{token}/singbox")
+async def sub_singbox(request: Request, token: str):
+    """Подписка в формате sing-box (JSON): все протоколы, автовыбор. ?masque=1 — с MASQUE (нужен sing-box 1.15+)."""
+    u, servers = _sub_user(token)
+    masque = request.query_params.get("masque") in ("1", "true", "yes")
+    return PlainTextResponse(clients.singbox_json(u, servers, masque), media_type="application/json",
                              headers=clients.sub_headers(u))
 
 
@@ -1581,6 +1591,7 @@ async def my_home(request: Request, cs: dict = Depends(client_dep)):
                 u["conns"].append(s)
             u["sub_url"] = f"{pb}/sub/{u['sub_token']}"
             u["sub_qr"] = clients.qr_svg(u["sub_url"])
+            u["has_masque"] = clients.has_masque(u["conns"])
     return render_portal(request, "my.html", cs, profiles=profiles)
 
 
@@ -1667,6 +1678,7 @@ for _lb in LEGACY_BASES:
     app.add_api_route(_lb + "/sub/{token}", sub, methods=["GET"], include_in_schema=False)
     app.add_api_route(_lb + "/sub/{token}/clash", sub_clash, methods=["GET"], include_in_schema=False)
     app.add_api_route(_lb + "/sub/{token}/masque/{sid}.json", sub_masque, methods=["GET"], include_in_schema=False)
+    app.add_api_route(_lb + "/sub/{token}/singbox", sub_singbox, methods=["GET"], include_in_schema=False)
 
     async def _legacy_redirect(request: Request, path: str = ""):
         target = _legacy_target(path)

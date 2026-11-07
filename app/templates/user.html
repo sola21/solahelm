@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import user_badge, bar, svc_badge, conn_links, client_apps %}
+{% from "_macros.html" import user_badge, bar, svc_badge, conn_links, client_apps, sb_sub_links %}
 {% block title %}{{ u.username }} · {{ brand }}{% endblock %}
 {% block content %}
 <div class="head">
@@ -37,10 +37,11 @@
 
   <section class="card">
     <h3>Подписка (все серверы профиля)</h3>
-    <p class="small muted">Клиент сам подтянет изменения серверов. Вторая ссылка — Clash-формат. Приложения:</p>{{ client_apps() }}
     <div class="qrwrap">{{ sub_qr|safe }}</div>
     <div class="copyline"><code id="sub">{{ sub_url }}</code><button class="btn sm" data-copy="#sub">Копировать</button></div>
     <div class="copyline"><code id="subc">{{ sub_url }}/clash</code><button class="btn sm" data-copy="#subc">Копировать</button></div>
+    {{ sb_sub_links(sub_url, has_masque, 'a') }}
+    <details class="howto"><summary class="small">Приложения (ссылки на загрузку)</summary>{{ client_apps() }}</details>
     <div class="btns">
       <a class="btn sm" href="{{ base }}/users/{{ u.id }}/clash.yaml">Скачать Clash Meta YAML</a>
       <form method="post" action="{{ base }}/users/{{ u.id }}/action/regen-sub" data-confirm="Перевыпустить ссылку подписки? Старая перестанет работать."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">Перевыпустить ссылку</button></form>
@@ -50,22 +51,21 @@
 
 <h2>Подключения по серверам</h2>
 {% if not servers %}<div class="card empty">Профиль не привязан ни к одному серверу. <a href="{{ base }}/users/{{ u.id }}/edit">Выбрать серверы</a></div>{% endif %}
-<div class="grid wide">
 {% for s in servers %}
-  <section class="card conn">
-    <div class="srv-head"><b><a href="{{ base }}/servers/{{ s.id }}">{{ s.name }}</a></b> {{ svc_badge(s.st) }}{% if s.u_online %} <span class="badge ok">онлайн: {{ s.u_online }}</span>{% endif %}</div>
+  <details class="card conn srv-fold">
+    <summary><b>{{ s.name }}</b> {{ svc_badge(s.st) }}{% if s.u_online %} <span class="badge ok">онлайн: {{ s.u_online }}</span>{% endif %}
+      <span class="small muted">· протоколов: {{ s.links|length }} · трафик здесь: {{ (s.u_tx + s.u_rx)|bytes }} · был онлайн {{ s.u_last|ago }}</span></summary>
+    <div class="srv-head small"><a href="{{ base }}/servers/{{ s.id }}">Страница сервера →</a></div>
     {{ conn_links(s.links, u.id, s.id, 'admin', sub_url) }}
-    <div class="small muted">Трафик здесь: {{ (s.u_tx + s.u_rx)|bytes }} · был онлайн {{ s.u_last|ago }}</div>
-  </section>
+  </details>
 {% endfor %}
-</div>
 
 {% if daily %}
 <h2>Трафик по дням</h2>
 <section class="card">
   <div class="chart">
   {% for d in daily %}{% set t = d.tx + d.rx %}
-    <div class="col" title="{{ d.day }}: {{ t|bytes }}"><i style="height:{{ pct(t, daily_max) or 1 }}%"></i><span>{{ d.day[8:] }}.{{ d.day[5:7] }}</span></div>
+    <div class="col" title="{{ d.day }}: {{ t|bytes }} (↓ {{ d.rx|bytes }} · ↑ {{ d.tx|bytes }})"><b class="v">{{ t|bytes if t else '—' }}</b><i style="height:{{ (pct(t, daily_max) * 0.8)|round(1) or 1 }}%"></i><span>{{ d.day[8:] }}.{{ d.day[5:7] }}</span></div>
   {% endfor %}
   </div>
 </section>

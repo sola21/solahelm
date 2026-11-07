@@ -93,3 +93,11 @@
   <li><a href="https://github.com/SagerNet/sing-box/releases" target="_blank" rel="noopener"><b>sing-box</b></a> (официальный клиент: Android, Windows, iOS) — нужен только для MASQUE</li>
 </ul>
 {%- endmacro %}
+
+{% macro sb_sub_links(sub_url, has_masque, idp) -%}
+<div class="copyline"><code id="sbs{{ idp }}">{{ sub_url }}/singbox</code><button class="btn sm" data-copy="#sbs{{ idp }}">Копировать</button></div>
+{% if has_masque %}<div class="copyline"><code id="sbm{{ idp }}">{{ sub_url }}/singbox?masque=1</code><button class="btn sm" data-copy="#sbm{{ idp }}">Копировать</button></div>{% endif %}
+<p class="small muted">Ссылки выше: первая — обычная (Hiddify, v2rayN, v2rayNG, Streisand, V2Box, Karing, NekoBox), вторая — Clash (Clash Verge, FlClash),
+  третья — для приложения <b>sing-box</b> (профиль типа «Удалённый»: все серверы и протоколы, автовыбор лучшего){% if has_masque %},
+  четвёртая — то же вместе с MASQUE (только sing-box 1.15+){% endif %}.</p>
+{%- endmacro %}

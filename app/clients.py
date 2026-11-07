@@ -307,6 +307,107 @@ def masque_json(user: dict, s: dict) -> str:
     return json.dumps(cfg, indent=2, ensure_ascii=False) + "\n"
 
 
+def _sb_tls(sni: str, insecure: bool = False, **extra) -> dict:
+    d = {"enabled": True, "server_name": sni}
+    if insecure:
+        d["insecure"] = True
+    d.update(extra)
+    return d
+
+
+def singbox_outbound(user: dict, s: dict, proto: str, tag: str) -> dict | None:
+    """Один протокол сервера как outbound (или endpoint для MASQUE) конфига sing-box. None — протокол не поддерживается."""
+    utls = {"enabled": True, "fingerprint": "chrome"}
+    if proto in ("vless", "vgrpc"):
+        e = vless_endpoint(s, proto)
+        o = {"type": "vless", "tag": tag, "server": e["host"], "server_port": e["port"], "uuid": user["uuid"],
+             "tls": _sb_tls(e["sni"], utls=utls, reality={"enabled": True, "public_key": e["pbk"], "short_id": e["sid"]})}
+        if proto == "vless":
+            o["flow"] = FLOW
+        else:
+            o["transport"] = {"type": "grpc", "service_name": e["service"]}
+        return o
+    if proto in ("anytls", "trojan"):
+        e = tls_endpoint(s, proto)
+        return {"type": proto, "tag": tag, "server": e["host"], "server_port": e["port"], "password": user["password"],
+                "tls": _sb_tls(e["sni"], e["insecure"], utls=utls)}
+    if proto == "tuic":
+        e = tls_endpoint(s, "tuic")
+        return {"type": "tuic", "tag": tag, "server": e["host"], "server_port": e["port"], "uuid": user["uuid"],
+                "password": user["password"], "congestion_control": "bbr", "udp_relay_mode": "native",
+                "tls": _sb_tls(e["sni"], e["insecure"], alpn=["h3"])}
+    if proto == "ss":
+        e = ss_endpoint(s)
+        return {"type": "shadowsocks", "tag": tag, "server": e["host"], "server_port": e["port"], "method": e["method"],
+                "password": ss_password(user, s)}
+    if proto == "masque":
+        e = masque_endpoint(s)
+        return {"type": "masque-client", "tag": tag, "server": e["host"], "server_port": e["port"],
+                "username": user["username"], "password": user["password"], "tls": _sb_tls(e["sni"], e["insecure"])}
+    if proto == "hy2":
+        e = endpoint(s)
+        o = {"type": "hysteria2", "tag": tag, "server": e["host"], "server_port": e["port"],
+             "password": f"{user['username']}:{user['password']}",
+             "tls": _sb_tls(e["sni"] or e["host"], e["insecure"], alpn=["h3"])}
+        if e["hop"]:
+            ranges = []
+            for part in e["hop"].split(","):
+                a, _, b = part.strip().partition("-")
+                ranges.append(f"{a}:{b or a}")
+            o["server_ports"] = ranges
+            o["hop_interval"] = "30s"
+            o.pop("server_port")
+        if e["obfs"]:
+            o["obfs"] = {"type": "salamander", "password": e["obfs"]}
+        return o
+    return None                      # Naive: в сборках sing-box для телефонов его может не быть — не включаем
+
+
+def singbox_json(user: dict, servers: list[dict], masque: bool = False) -> str:
+    """Подписка для приложения sing-box: все серверы и протоколы профиля, автовыбор (urltest) и ручной выбор.
+    MASQUE — только при masque=True: конфиг с ним открывается лишь в sing-box 1.15+."""
+    outbounds, endpoints, tags, hosts = [], [], [], []
+    for s in servers:
+        for proto in protos(s):
+            if proto == "masque" and not masque:
+                continue
+            tag = f"{s['name']}-{PROTO_LABELS[proto]}"
+            while tag in tags:
+                tag += "*"
+            o = singbox_outbound(user, s, proto, tag)
+            if not o:
+                continue
+            tags.append(tag)
+            (endpoints if proto == "masque" else outbounds).append(o)
+            if not _is_ip(o["server"]) and o["server"] not in hosts:
+                hosts.append(o["server"])
+    sel = ["auto"] + tags if len(tags) > 1 else list(tags)
+    groups = [{"type": "selector", "tag": "proxy", "outbounds": sel or ["direct"], "default": sel[0] if sel else "direct"}]
+    if len(tags) > 1:
+        groups.append({"type": "urltest", "tag": "auto", "outbounds": tags, "url": "https://www.gstatic.com/generate_204",
+                       "interval": "5m", "tolerance": 100})
+    dns_rules = [{"domain": hosts, "server": "dns-local"}] if hosts else []
+    cfg = {
+        "log": {"level": "warn"},
+        "dns": {"servers": [{"type": "https", "tag": "dns-remote", "server": "1.1.1.1", "detour": "proxy"},
+                            {"type": "local", "tag": "dns-local"}],
+                "rules": dns_rules, "final": "dns-remote"},
+        "inbounds": [{"type": "tun", "tag": "tun-in", "address": ["172.19.0.1/30"], "auto_route": True, "strict_route": True},
+                     {"type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 2080}],
+        "outbounds": groups + outbounds + [{"type": "direct", "tag": "direct"}],
+        "route": {"rules": [{"action": "sniff"}, {"protocol": "dns", "action": "hijack-dns"},
+                            {"ip_is_private": True, "outbound": "direct"}],
+                  "final": "proxy", "auto_detect_interface": True, "default_domain_resolver": "dns-local"},
+    }
+    if endpoints:
+        cfg["endpoints"] = endpoints
+    return json.dumps(cfg, indent=2, ensure_ascii=False) + "\n"
+
+
+def has_masque(servers: list[dict]) -> bool:
+    return any("masque" in protos(s) for s in servers)
+
+
 def sub_body(user: dict, servers: list[dict]) -> str:
     return base64.b64encode("\n".join(all_uris(user, servers)).encode()).decode()
 
