@@ -78,7 +78,7 @@
       <label>SNI<input name="sni" value="{{ f.sni or '' }}"></label>
     </div>
     <div class="row">
-      <label>Port hopping<input name="hop_ports" value="{{ f.hop_ports or '' }}" placeholder="443,20000-30000"></label>
+      <label>Port hopping (Hysteria2)<input name="hop_ports" value="{{ f.hop_ports or '' }}" placeholder="443,20000-40000"><small>Клиент сам перескакивает между UDP-портами — блокировку одного потока это обходит. После сохранения нажмите «Применить на сервере» в блоке «Конфигурация» страницы сервера: панель перенаправит эти порты на Hysteria (iptables) и откроет их в ufw</small></label>
     </div>
     <label class="check"><input type="checkbox" name="insecure" value="1" {{ 'checked' if f.insecure in (1,'1') }}> insecure (самоподписанный сертификат)</label>
   </fieldset>

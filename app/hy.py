@@ -265,6 +265,11 @@ def sync_server(sid: int) -> dict:
                         changed = sb.sync(c, s, rows) or changed
                     except (HyError, SSHError) as e:
                         errors.append(f"sing-box: {e}")
+                if s.get("masque_enabled"):
+                    try:
+                        changed = sb.sync_masque(c, s, rows) or changed
+                    except (HyError, SSHError) as e:
+                        errors.append(f"MASQUE: {e}")
             if errors:
                 raise HyError("\n".join(errors))
             db.ex("UPDATE servers SET last_sync=?, sync_error='' WHERE id=?", (int(time.time()), sid))
@@ -317,9 +322,13 @@ def rollback_config(sid: int, which: str = "hy") -> str:
     """Вернуть предыдущий конфиг из последнего бэкапа (which: hy — Hysteria2, sb — sing-box) и перезапустить службу."""
     with server_lock(sid):
         s = get_server(sid)
-        sb_mode = which == "sb"
-        path = s["sb_config_path"] if sb_mode else s["config_path"]
-        service = s["sb_service"] if sb_mode else s["service"]
+        from . import sb
+        sb_mode = which in ("sb", "mq")
+        if which == "mq":
+            path, service = sb.MASQUE_CFG, sb.MASQUE_SVC
+        else:
+            path = s["sb_config_path"] if sb_mode else s["config_path"]
+            service = s["sb_service"] if sb_mode else s["service"]
         p = shlex.quote(path)
         with Conn(s) as c:
             code, out, _ = c.run(f'ls -1 {p}.bak.* 2>/dev/null | sort | tail -n 1')
@@ -355,6 +364,11 @@ SB=__SBSVC__
 if [ -n "$SB" ]; then
   echo "sb_active=$(systemctl is-active $SB 2>/dev/null)"
   echo "sb_version=$(sing-box version 2>/dev/null | awk 'NR==1{print $NF}')"
+fi
+MQ=__MQSVC__
+if [ -n "$MQ" ]; then
+  echo "mq_active=$(systemctl is-active $MQ 2>/dev/null)"
+  echo "mq_version=$(__MQBIN__ version 2>/dev/null | awk 'NR==1{print $NF}')"
 fi
 """
 
@@ -394,11 +408,14 @@ def _poll_once(s: dict, prev: dict, now: int):
         from . import sb
         with Conn(s) as c:
             cmd = STATUS_CMD.replace("__SVC__", shlex.quote(s["service"])).replace(
-                "__SBSVC__", shlex.quote(s["sb_service"]) if sb.enabled(s) else "''")
+                "__SBSVC__", shlex.quote(s["sb_service"]) if sb.enabled(s) else "''").replace(
+                "__MQSVC__", sb.MASQUE_SVC if s.get("masque_enabled") else "''").replace("__MQBIN__", sb.MASQUE_BIN)
             code, out, err = c.run(cmd, timeout=45)
             kv = _kv(out)
             if sb.enabled(s):
                 st["sb_active"], st["sb_version"] = kv.get("sb_active", ""), kv.get("sb_version", "")
+            if s.get("masque_enabled"):
+                st["mq_active"], st["mq_version"] = kv.get("mq_active", ""), kv.get("mq_version", "")
             st.update(active=kv.get("active", ""), enabled=kv.get("enabled", ""), since=kv.get("since", ""),
                       version=kv.get("version", ""), os=kv.get("os", ""), iface=kv.get("iface", ""),
                       load=kv.get("load", ""), cpus=int(kv.get("cpus") or 0))
@@ -416,8 +433,8 @@ def _poll_once(s: dict, prev: dict, now: int):
                     st["rate_tx"] = (net[1] - prev["net_tx"]) / dt
             if not s["hy2_enabled"]:
                 # сервер только под sing-box: общее состояние берём у него, Hysteria не опрашиваем
-                st["active"] = st.get("sb_active", "")
-                st["version"] = st.get("sb_version", "")
+                st["active"] = st.get("sb_active", "") or st.get("mq_active", "")
+                st["version"] = st.get("sb_version", "") or st.get("mq_version", "")
             else:
                 try:
                     info = cfg_info(load_cfg(c.read_file(s["config_path"])))
@@ -559,8 +576,9 @@ def service_action(sid: int, op: str) -> str:
 
 
 def get_logs(sid: int, lines: int = 200, which: str = "hy") -> str:
+    from . import sb
     s = get_server(sid)
-    svc = s["sb_service"] if which == "sb" else s["service"]
+    svc = {"sb": s["sb_service"], "mq": sb.MASQUE_SVC}.get(which, s["service"])
     with Conn(s) as c:
         return c.run(f"journalctl -u {shlex.quote(svc)} -n {int(lines)} --no-pager -o short-iso",
                      timeout=30)[1]
@@ -695,3 +713,120 @@ def update_core(sid: int, log) -> None:
             svc_restart_verify(c, s, rollback=False)
             log("Служба активна.\n")
     poll_server(sid)
+
+
+# ---------------- port hopping (Hysteria2) ----------------
+# Клиент Hysteria2 сам перескакивает между UDP-портами из диапазона (hop_ports в настройках сервера).
+# На сервере для этого все порты диапазона перенаправляются на порт Hysteria правилом iptables (nat REDIRECT).
+HOP_BIN = "/usr/local/sbin/hy2panel-hop"
+HOP_UNIT = "hy2panel-hop.service"
+HOP_RE = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
+
+
+def hop_ranges(spec: str, port: int) -> list[tuple[int, int]]:
+    """'443,20000-30000' → [(20000, 30000)]: диапазоны для перенаправления (основной порт Hysteria не нужен)."""
+    spec = (spec or "").replace(" ", "")
+    if not spec:
+        return []
+    if not HOP_RE.match(spec):
+        raise HyError("Порты hopping: формат 443,20000-30000")
+    out = []
+    for part in spec.split(","):
+        a, _, b = part.partition("-")
+        lo, hi = int(a), int(b or a)
+        if lo > hi:
+            lo, hi = hi, lo
+        if not (1 <= lo <= 65535 and 1 <= hi <= 65535):
+            raise HyError(f"Порты hopping: {part} — вне диапазона 1–65535")
+        if lo == hi == port:
+            continue
+        if lo <= port <= hi:
+            raise HyError(f"Диапазон {part} включает основной порт Hysteria {port} — исключите его (например 20000-40000)")
+        out.append((lo, hi))
+    if sum(hi - lo + 1 for lo, hi in out) > 30000:
+        raise HyError("Слишком большой диапазон port hopping (больше 30000 портов)")
+    return out
+
+
+def build_hop_script(ranges: list[tuple[int, int]], port: int) -> str:
+    rules = "\n".join(f"rule {lo}:{hi}" for lo, hi in ranges)
+    helper = f"""#!/bin/bash
+# Hysteria2 port hopping (SolaHelm): UDP ranges are redirected to port {port}.
+ACT="$1"; PORT={port}
+rule() {{
+  for T in iptables ip6tables; do
+    command -v $T >/dev/null 2>&1 || continue
+    ARGS="PREROUTING -p udp --dport $1 -m comment --comment hy2panel-hop -j REDIRECT --to-ports $PORT"
+    if [ "$ACT" = start ]; then
+      $T -t nat -C $ARGS 2>/dev/null || $T -t nat -A $ARGS || [ $T = ip6tables ] || exit 1
+    else
+      while $T -t nat -D $ARGS 2>/dev/null; do :; done
+    fi
+  done
+}}
+{rules}
+exit 0
+"""
+    unit = f"""[Unit]
+Description=Hysteria2 port hopping (SolaHelm)
+After=network-online.target
+Before=hysteria-server.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart={HOP_BIN} start
+ExecStop={HOP_BIN} stop
+
+[Install]
+WantedBy=multi-user.target
+"""
+    L = ["set -e",
+         f"if systemctl is-active --quiet {HOP_UNIT}; then systemctl stop {HOP_UNIT} || true; fi",
+         "if ! command -v iptables >/dev/null 2>&1; then export DEBIAN_FRONTEND=noninteractive; "
+         "apt-get update -y >/dev/null && apt-get install -y iptables; fi",
+         f"cat > {HOP_BIN} <<'HY2PANEL_HOP'", helper.rstrip("\n"), "HY2PANEL_HOP", f"chmod 755 {HOP_BIN}",
+         f"cat > /etc/systemd/system/{HOP_UNIT} <<'HY2PANEL_UNIT'", unit.rstrip("\n"), "HY2PANEL_UNIT",
+         "systemctl daemon-reload", f"systemctl enable --now {HOP_UNIT}",
+         f"systemctl is-active --quiet {HOP_UNIT} || {{ journalctl -u {HOP_UNIT} -n 20 --no-pager -o cat; exit 1; }}"]
+    for lo, hi in ranges:
+        L.append(f"if command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then ufw allow {lo}:{hi}/udp; fi")
+    L.append("iptables -t nat -S PREROUTING | grep hy2panel-hop")
+    return "\n".join(L) + "\n"
+
+
+HOP_REMOVE = f"""set -e
+if [ -f /etc/systemd/system/{HOP_UNIT} ]; then systemctl disable --now {HOP_UNIT} || true; fi
+rm -f /etc/systemd/system/{HOP_UNIT} {HOP_BIN}
+systemctl daemon-reload
+for T in iptables ip6tables; do
+  command -v $T >/dev/null 2>&1 || continue
+  $T -t nat -S PREROUTING 2>/dev/null | grep -- '--comment hy2panel-hop' | sed 's/^-A /-D /' | while read -r R; do eval $T -t nat $R || true; done
+done
+echo "port hopping removed"
+"""
+
+
+def apply_hop(sid: int) -> str:
+    """Применить на сервере диапазон port hopping из настроек сервера (пустой — убрать правила)."""
+    with server_lock(sid):
+        s = get_server(sid)
+        if not s["hy2_enabled"]:
+            raise HyError("Port hopping работает только для Hysteria2, а она на этом сервере не установлена")
+        port = int(json.loads(s.get("cfg_info") or "{}").get("port") or 443)
+        ranges = hop_ranges(s.get("hop_ports") or "", port)
+        old = [tuple(map(int, r.split(":"))) for r in (s.get("hop_applied") or "").split(",") if r]
+        with Conn(s) as c:
+            if old:
+                # снять прежние разрешения ufw (правила iptables снимает остановка службы)
+                c.run("command -v ufw >/dev/null 2>&1 && " + " ; ".join(f"ufw delete allow {lo}:{hi}/udp" for lo, hi in old)
+                      + " ; true", timeout=60)
+            script = build_hop_script(ranges, port) if ranges else HOP_REMOVE
+            code, out, err = c.run(RUN_SCRIPT, input=script, timeout=300)
+        if code != 0:
+            raise HyError(f"Не удалось настроить port hopping:\n{(err or out).strip()[-1500:]}")
+        applied = ",".join(f"{lo}:{hi}" for lo, hi in ranges)
+        db.ex("UPDATE servers SET hop_applied=? WHERE id=?", (applied, sid))
+        if not ranges:
+            return "Port hopping на сервере выключен"
+        return f"Port hopping включён: UDP {', '.join(f'{lo}–{hi}' for lo, hi in ranges)} → {port}"

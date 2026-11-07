@@ -25,7 +25,11 @@
 {% for l in links %}
   {% set eid = 'l' ~ uid ~ '_' ~ sid ~ '_' ~ l.proto %}
   <div class="proto">
-    <div class="proto-head"><span class="badge {{ {'hy2':'','vless':'ok','anytls':'warn','trojan':'ok','tuic':'warn','ss':'','naive':'ok'}.get(l.proto, '') }}">{{ l.label }}</span></div>
+    <div class="proto-head"><span class="badge {{ {'hy2':'','vless':'ok','vgrpc':'ok','anytls':'warn','trojan':'ok','tuic':'warn','ss':'','naive':'ok','masque':'warn'}.get(l.proto, '') }}">{{ l.label }}</span></div>
+    {% if l.proto == 'masque' %}
+    <p class="small muted">У MASQUE нет ссылки и QR-кода. Скачайте конфиг и импортируйте его в приложение <b>sing-box</b> версии 1.15 или новее (пока это бета: Android — файл SFA с GitHub, Windows/Linux — sing-box run -c файл.json). Clash, v2rayNG и Hiddify MASQUE пока не поддерживают.</p>
+    <div class="btns"><a class="btn sm primary" href="{{ (base ~ '/users/%d/masque/%d.json'|format(uid, sid)) if area == 'admin' else (pub ~ '/masque/%d/%d.json'|format(uid, sid)) }}">Скачать конфиг sing-box (JSON)</a></div>
+    {% else %}
     <div class="qrwrap">{{ l.qr|safe }}</div>
     <div class="copyline"><code id="{{ eid }}" class="wrapcode">{{ l.uri }}</code></div>
     <div class="btns">
@@ -33,6 +37,7 @@
       <a class="btn sm" href="{{ (base ~ '/users/%d/qr/%d.png'|format(uid, sid)) if area == 'admin' else (pub ~ '/qr/%d/%d.png'|format(uid, sid)) }}?p={{ l.proto }}" download>QR PNG</a>
       {% if l.proto == 'hy2' %}<a class="btn sm" href="{{ (base ~ '/users/%d/hysteria/%d.yaml'|format(uid, sid)) if area == 'admin' else (pub ~ '/hysteria/%d/%d.yaml'|format(uid, sid)) }}">YAML</a>{% endif %}
     </div>
+    {% endif %}
   </div>
 {% endfor %}
 </div>
@@ -41,11 +46,13 @@
 {% macro proto_badges(s) -%}
 {% if s.hy2_enabled %}<span class="badge">Hy2</span>{% endif %}
 {% if s.vless_enabled %}<span class="badge ok">VLESS</span>{% endif %}
+{% if s.vgrpc_enabled %}<span class="badge ok">VLESS gRPC</span>{% endif %}
 {% if s.anytls_enabled %}<span class="badge warn">AnyTLS</span>{% endif %}
 {% if s.trojan_enabled %}<span class="badge ok">Trojan</span>{% endif %}
 {% if s.tuic_enabled %}<span class="badge warn">TUIC</span>{% endif %}
 {% if s.ss_enabled %}<span class="badge">SS-2022</span>{% endif %}
 {% if s.naive_enabled %}<span class="badge ok">Naive</span>{% endif %}
+{% if s.masque_enabled %}<span class="badge warn">MASQUE</span>{% endif %}
 {%- endmacro %}
 
 {% macro sync_badge(s) -%}

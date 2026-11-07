@@ -11,8 +11,9 @@ from ruamel.yaml import YAML
 
 from . import security
 
-PROTO_LABELS = {"hy2": "Hysteria2", "vless": "VLESS Reality", "anytls": "AnyTLS", "trojan": "Trojan", "tuic": "TUIC v5",
-                "ss": "Shadowsocks-2022", "naive": "Naive"}
+PROTO_LABELS = {"hy2": "Hysteria2", "vless": "VLESS Reality", "vgrpc": "VLESS Reality gRPC", "anytls": "AnyTLS",
+                "trojan": "Trojan", "tuic": "TUIC v5", "ss": "Shadowsocks-2022", "naive": "Naive", "masque": "MASQUE"}
+NO_URI = ("masque",)          # у MASQUE нет общепринятой ссылки — клиенту отдаётся конфиг sing-box (JSON)
 SS_METHOD = "2022-blake3-aes-128-gcm"
 FLOW = "xtls-rprx-vision"
 
@@ -36,12 +37,21 @@ def protos(s: dict) -> list[str]:
         out.append("hy2")
     if s.get("vless_enabled") and s.get("reality_pub"):
         out.append("vless")
+    if s.get("vgrpc_enabled") and s.get("reality_pub") and s.get("grpc_service"):
+        out.append("vgrpc")
     for p in ("anytls", "trojan", "tuic", "naive"):               # TLS-протоколы работают на домене сервера
         if s.get(f"{p}_enabled") and s.get("anytls_domain"):
             out.append(p)
     if s.get("ss_enabled") and s.get("ss_key"):
         out.append("ss")
+    if s.get("masque_enabled") and s.get("anytls_domain"):
+        out.append("masque")
     return out
+
+
+def uri_protos(s: dict) -> list[str]:
+    """Протоколы, у которых есть ссылка (для подписки и QR)."""
+    return [p for p in protos(s) if p not in NO_URI]
 
 
 def endpoint(s: dict) -> dict:
@@ -54,10 +64,10 @@ def endpoint(s: dict) -> dict:
             "obfs": info.get("obfs") or "", "hop": (s.get("hop_ports") or "").strip()}
 
 
-def vless_endpoint(s: dict) -> dict:
+def vless_endpoint(s: dict, proto: str = "vless") -> dict:
     host = (s.get("public_host") or "").strip() or s["host"]
-    return {"host": host, "port": int(s["vless_port"]), "sni": s["reality_sni"], "pbk": s["reality_pub"],
-            "sid": s["reality_sid"]}
+    return {"host": host, "port": int(s[f"{proto}_port"]), "sni": s["reality_sni"], "pbk": s["reality_pub"],
+            "sid": s["reality_sid"], "service": s.get("grpc_service") or ""}
 
 
 def anytls_endpoint(s: dict) -> dict:
@@ -91,6 +101,11 @@ def _tag(user: dict, s: dict, proto: str) -> str:
     return base if len(protos(s)) == 1 else f"{base}-{proto}"
 
 
+def masque_endpoint(s: dict) -> dict:
+    e = anytls_endpoint(s)
+    return {**e, "port": int(s["masque_port"])}
+
+
 def uri(user: dict, s: dict, proto: str = "hy2") -> str:
     name = quote(_tag(user, s, proto), safe="")
     if proto == "vless":
@@ -98,6 +113,13 @@ def uri(user: dict, s: dict, proto: str = "hy2") -> str:
         q = (f"encryption=none&flow={FLOW}&security=reality&sni={quote(e['sni'], safe='')}&fp=chrome"
              f"&pbk={e['pbk']}&sid={e['sid']}&type=tcp&headerType=none")
         return f"vless://{user['uuid']}@{_fmt_host(e['host'])}:{e['port']}?{q}#{name}"
+    if proto == "vgrpc":
+        e = vless_endpoint(s, "vgrpc")
+        q = (f"encryption=none&security=reality&sni={quote(e['sni'], safe='')}&fp=chrome"
+             f"&pbk={e['pbk']}&sid={e['sid']}&type=grpc&serviceName={quote(e['service'], safe='')}&mode=gun")
+        return f"vless://{user['uuid']}@{_fmt_host(e['host'])}:{e['port']}?{q}#{name}"
+    if proto == "masque":
+        return ""
     if proto == "anytls":
         e = anytls_endpoint(s)
         q = f"sni={quote(e['sni'], safe='')}" + ("&insecure=1" if e["insecure"] else "")
@@ -137,13 +159,16 @@ def links(user: dict, s: dict) -> list[dict]:
     """Все ссылки профиля на сервере: [{proto, label, uri, qr}]."""
     out = []
     for p in protos(s):
+        if p in NO_URI:
+            out.append({"proto": p, "label": PROTO_LABELS[p], "uri": "", "qr": ""})
+            continue
         u = uri(user, s, p)
         out.append({"proto": p, "label": PROTO_LABELS[p], "uri": u, "qr": qr_svg(u)})
     return out
 
 
 def all_uris(user: dict, servers: list[dict]) -> list[str]:
-    return [uri(user, s, p) for s in servers for p in protos(s)]
+    return [uri(user, s, p) for s in servers for p in uri_protos(s)]
 
 
 def _dump(data, header: str = "") -> str:
@@ -193,6 +218,15 @@ def clash_yaml(user: dict, servers: list[dict], template: dict | None = None) ->
                            "network": "tcp", "udp": True, "tls": True, "flow": FLOW, "servername": e["sni"],
                            "reality-opts": {"public-key": e["pbk"], "short-id": e["sid"]},
                            "client-fingerprint": "chrome"})
+            elif proto == "vgrpc":
+                e = vless_endpoint(s, "vgrpc")
+                add(name, {"type": "vless", "server": e["host"], "port": e["port"], "uuid": user["uuid"],
+                           "network": "grpc", "udp": True, "tls": True, "servername": e["sni"],
+                           "grpc-opts": {"grpc-service-name": e["service"]},
+                           "reality-opts": {"public-key": e["pbk"], "short-id": e["sid"]},
+                           "client-fingerprint": "chrome"})
+            elif proto in ("naive", "masque"):
+                continue                       # Clash Meta / mihomo не поддерживает Naive и MASQUE
             elif proto == "anytls":
                 e = anytls_endpoint(s)
                 add(name, {"type": "anytls", "server": e["host"], "port": e["port"], "password": user["password"],
@@ -207,8 +241,6 @@ def clash_yaml(user: dict, servers: list[dict], template: dict | None = None) ->
                 add(name, {"type": "tuic", "server": e["host"], "port": e["port"], "uuid": user["uuid"],
                            "password": user["password"], "alpn": ["h3"], "udp-relay-mode": "native",
                            "congestion-controller": "bbr", "sni": e["sni"], "skip-cert-verify": e["insecure"]})
-            elif proto == "naive":
-                continue                       # Clash Meta / mihomo не поддерживает Naive
             elif proto == "ss":
                 e = ss_endpoint(s)
                 add(name, {"type": "ss", "server": e["host"], "port": e["port"], "cipher": e["method"],
@@ -248,6 +280,31 @@ def clash_yaml(user: dict, servers: list[dict], template: dict | None = None) ->
                      "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve", "IP-CIDR,192.168.0.0/16,DIRECT,no-resolve",
                      "MATCH,PROXY"]}
     return _dump(cfg, f"# Clash Meta / mihomo — {user['username']}\n")
+
+
+def masque_json(user: dict, s: dict) -> str:
+    """Конфиг клиента sing-box 1.15+ для MASQUE: TUN (весь трафик устройства) + локальный прокси 127.0.0.1:2080."""
+    e = masque_endpoint(s)
+    tls = {"enabled": True, "server_name": e["sni"]}
+    if e["insecure"]:
+        tls["insecure"] = True
+    cfg = {
+        "log": {"level": "warn"},
+        "dns": {"servers": [{"type": "https", "tag": "dns-remote", "server": "1.1.1.1", "detour": "masque"},
+                            {"type": "local", "tag": "dns-local"}],
+                "rules": [{"domain": [e["host"]], "server": "dns-local"}],
+                "final": "dns-remote"},
+        "inbounds": [{"type": "tun", "tag": "tun-in", "address": ["172.19.0.1/30"], "auto_route": True,
+                      "strict_route": True},
+                     {"type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 2080}],
+        "endpoints": [{"type": "masque-client", "tag": "masque", "server": e["host"], "server_port": e["port"],
+                       "username": user["username"], "password": user["password"], "tls": tls}],
+        "outbounds": [{"type": "direct", "tag": "direct"}],
+        "route": {"rules": [{"action": "sniff"}, {"protocol": "dns", "action": "hijack-dns"},
+                            {"ip_is_private": True, "outbound": "direct"}],
+                  "final": "masque", "auto_detect_interface": True, "default_domain_resolver": "dns-local"},
+    }
+    return json.dumps(cfg, indent=2, ensure_ascii=False) + "\n"
 
 
 def sub_body(user: dict, servers: list[dict]) -> str:

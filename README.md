@@ -1,6 +1,6 @@
 # SolaHelm
 
-Self-hosted web panel for managing **Hysteria2** servers — and **VLESS (Reality)**, **AnyTLS**, **Trojan**, **TUIC v5**, **Shadowsocks-2022** and **Naive** via sing-box on the same
+Self-hosted web panel for managing **Hysteria2** servers — and **VLESS (Reality, TCP and gRPC)**, **AnyTLS**, **Trojan**, **TUIC v5**, **Shadowsocks-2022**, **Naive** and **MASQUE** (experimental) via sing-box on the same
 servers — from one place. Create client profiles, hand out links / QR codes / subscriptions, watch server health,
 and let your users open a personal cabinet with their own connections.
 
@@ -26,10 +26,10 @@ Bilingual interface (**English / Русский**) with a language switch on eve
 - **Many VPS from one panel.** Add servers by SSH (panel key, password or your own key), see service state, version,
   uptime, CPU / RAM / disk, network speed. Start / stop / restart, journal, config editor with backup and automatic rollback.
 - **One-click install on a clean Debian/Ubuntu VPS:** Hysteria2 (ACME certificate, masquerade site, `userpass` auth,
-  traffic stats API, ufw) and/or sing-box with VLESS Reality, AnyTLS, Trojan, TUIC v5, Shadowsocks-2022 and Naive (fallback protocols if one gets blocked). Live install log.
+  traffic stats API, ufw) and/or sing-box with VLESS Reality (TCP and gRPC), AnyTLS, Trojan, TUIC v5, Shadowsocks-2022, Naive and MASQUE (fallback protocols if one gets blocked). Live install log. One-click sing-box update, server-side port hopping for Hysteria2.
 - **Profiles:** create / edit / disable / delete, expiry date, traffic limit, per-profile access to chosen servers
   (matrix page "Access"). Changes are pushed to server configs automatically, with verification and rollback.
-- **Client artifacts:** `hysteria2://`, `vless://`, `anytls://`, `trojan://`, `tuic://`, `ss://`, `naive+https://` links, QR codes (SVG / PNG), Hysteria YAML,
+- **Client artifacts:** `hysteria2://`, `vless://`, `anytls://`, `trojan://`, `tuic://`, `ss://`, `naive+https://` links, QR codes (SVG / PNG), Hysteria YAML, sing-box JSON for MASQUE,
   Clash Meta / mihomo YAML, and a **subscription URL** (base64 and Clash format) with traffic/expiry headers.
 - **Routing templates** for Clash/mihomo (DNS, TUN, rule providers, rules). Upload any ready-made mihomo config;
   the panel keeps routing and injects your servers. Two presets included.
@@ -56,7 +56,7 @@ Browser ──HTTPS──► nginx ──HTTP──► SolaHelm (127.0.0.1:8088,
 ```
 
 The panel is the **source of truth** for users: it rewrites the `auth.userpass` section of Hysteria's `config.yaml`
-and the `vless-in` / `anytls-in` / `trojan-in` / `tuic-in` / `ss-in` / `naive-in` inbounds of sing-box (everything else is left alone), keeps timestamped backups
+and the `vless-in` / `anytls-in` / `trojan-in` / `tuic-in` / `ss-in` / `naive-in` / `vless-grpc-in` inbounds of sing-box and the `masque-in` endpoint of the separate MASQUE service (everything else is left alone), keeps timestamped backups
 and restarts the service only when something changed.
 
 ## Requirements
@@ -151,7 +151,9 @@ simply stays in Russian. Adding another language means adding another dictionary
 3. **Check**. If Hysteria2 is already running there: **Import profiles from server**, then **Sync**.
    On a clean VPS use the **Install** block (needs a domain with an A record pointing to the VPS and an e-mail for ACME).
 
-Hysteria2 listens on UDP 443 and (masquerade + ACME) TCP 443/80, so the other protocols default to VLESS 8443, AnyTLS 9443, Trojan 7443, TUIC 8444 (UDP), Shadowsocks 2443, Naive 6443 (TCP + UDP for HTTP/3). Naive is not supported by Clash Meta / mihomo, so it is left out of the Clash config (links, QR and the base64 subscription have it).
+Hysteria2 listens on UDP 443 and (masquerade + ACME) TCP 443/80, so the other protocols default to VLESS 8443, AnyTLS 9443, Trojan 7443, TUIC 8444 (UDP), Shadowsocks 2443, Naive 6443 (TCP + UDP for HTTP/3). VLESS gRPC 8445, MASQUE 5443 (UDP + TCP). Naive is not supported by Clash Meta / mihomo, so it is left out of the Clash config (links, QR and the base64 subscription have it).
+
+**MASQUE** (RFC 9484, CONNECT-IP over HTTP/3) exists only in sing-box 1.15, which is still an alpha. The panel therefore runs it as a separate service `sing-box-next.service` with its own binary (`/usr/local/lib/hy2panel/sing-box-next`, latest 1.15+ from GitHub), so the stable sing-box with the other protocols is not affected. MASQUE has no share link and is not supported by Clash / v2rayNG / Hiddify yet: the profile gets a sing-box 1.15+ JSON config to download.
 
 ## Configuration (`.env`)
 

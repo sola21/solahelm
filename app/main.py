@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import clients, db, guard, hy, routing, security, ssh
+from . import clients, db, guard, hy, routing, sb, security, ssh
 from .i18n import LANG_COOKIE, LANGS, detect_lang, get_lang, js_bundle, reset_lang, set_lang, tr, tr_html
 from .config import (ADMIN_BASE as ABASE, APP_DIR, BASE_PATH as BASE, BRAND, COOKIE_SECURE, DEFAULT_LANG, LEGACY_ADMIN_REDIRECT,
                      LEGACY_BASES, POLL_INTERVAL, PUBLIC_URL, SESSION_HOURS, TRUSTED_PROXIES)
@@ -452,7 +452,8 @@ async def server_page(request: Request, sid: int, sess: dict = Depends(session_d
                   linkable=linkable, drift=_drift(s), guard=guard.cached(s),
                   hostkey_fp=ssh.host_key_fingerprint(s["host_key"]), pubkey=ssh.panel_pubkey(),
                   endpoint=clients.endpoint(s), hist=hy.history(sid, request.query_params.get("range", "24h")),
-                  fail_threshold=hy.fail_threshold(), poll_interval=db.get_setting("poll_interval", POLL_INTERVAL))
+                  fail_threshold=hy.fail_threshold(), poll_interval=db.get_setting("poll_interval", POLL_INTERVAL),
+                  sni_brand=sb.brand_sni(s.get("reality_sni") or ""))
 
 
 def _drift(s: dict) -> dict | None:
@@ -613,7 +614,7 @@ async def api_import(request: Request, sid: int, sess: dict = Depends(csrf_dep))
 
 @r.get("/api/servers/{sid}/logs")
 async def api_logs(request: Request, sid: int, n: int = 200, which: str = "hy", sess: dict = Depends(session_dep)):
-    ok, res = await call(hy.get_logs, sid, max(10, min(n, 2000)), "sb" if which == "sb" else "hy")
+    ok, res = await call(hy.get_logs, sid, max(10, min(n, 2000)), which if which in ("sb", "mq") else "hy")
     return jok(text=res) if ok else jerr(res)
 
 
@@ -660,7 +661,7 @@ async def api_sbconfig_save(request: Request, sid: int, sess: dict = Depends(csr
 
 @r.post("/api/servers/{sid}/rollback")
 async def api_rollback(request: Request, sid: int, which: str = "hy", sess: dict = Depends(csrf_dep)):
-    ok, res = await call(hy.rollback_config, sid, "sb" if which == "sb" else "hy")
+    ok, res = await call(hy.rollback_config, sid, which if which in ("sb", "mq") else "hy")
     audit(request, "server.config.rollback", f"id={sid} {res[:200] if isinstance(res, str) else ''}")
     return jok(msg=f"Восстановлен {res}") if ok else jerr(res)
 
@@ -728,30 +729,53 @@ async def api_provision_sb(request: Request, sid: int, sess: dict = Depends(csrf
             "reality_sni": str(b.get("reality_sni", "")).strip().lower(),
             "anytls_domain": str(b.get("anytls_domain", "")).strip().lower(),
             "anytls_cert": "selfsigned" if b.get("anytls_cert") == "selfsigned" else "hysteria"}
-    for p in sb.PROTOCOLS:
+    for p in sb.PROTOCOLS + ("masque",):
         opts[p] = bool(b.get(p))
         opts[p + "_port"] = _int(b.get(p + "_port", sb.DEFAULT_PORTS[p]), 1, 65535, 0)
-    chosen = [p for p in sb.PROTOCOLS if opts[p]]
-    if not chosen:
+    chosen = [p for p in sb.PROTOCOLS + ("masque",) if opts[p]]
+    if not chosen and not sb.any_enabled(s):
         return jerr("Выберите хотя бы один протокол")
     for p in chosen:
         if not opts[p + "_port"]:
             return jerr(f"Некорректный порт {sb.NAMES[p]}")
-    if opts["vless"] and not sb.DOMAIN_RE.match(opts["reality_sni"]):
-        return jerr("Укажите домен для маскировки Reality (например www.microsoft.com)")
-    if any(opts[p] for p in sb.TLS_PROTOS) and not sb.DOMAIN_RE.match(opts["anytls_domain"]):
-        return jerr("Укажите домен сервера для TLS-протоколов (A-запись должна указывать на этот сервер)")
+    if any(opts[p] for p in sb.REALITY_PROTOS) and not sb.DOMAIN_RE.match(opts["reality_sni"]):
+        return jerr("Укажите домен для маскировки Reality (неброский сайт с TLS 1.3)")
+    if (any(opts[p] for p in sb.TLS_PROTOS) or opts["masque"]) and not sb.DOMAIN_RE.match(opts["anytls_domain"]):
+        return jerr("Укажите домен сервера для TLS-протоколов и MASQUE (A-запись должна указывать на этот сервер)")
     ports = [opts[p + "_port"] for p in chosen]
     if len(set(ports)) != len(ports):
         return jerr("Порты протоколов должны различаться")
     if s["hy2_enabled"]:
-        # Hysteria2 по инструкции занимает TCP 443 (заглушка HTTPS) и TCP 80 (ACME)
+        # Hysteria2 по инструкции занимает TCP 443 (заглушка HTTPS), UDP 443 (сама Hysteria) и TCP 80 (ACME)
         for p in chosen:
             if opts[p + "_port"] in (80, 443):
                 return jerr(f"Порт {sb.NAMES[p]} {opts[p + '_port']} занят Hysteria2 — выберите другой, например 8443")
+        try:
+            hport = int(json.loads(s.get("cfg_info") or "{}").get("port") or 443)
+            for lo, hi in hy.hop_ranges(s.get("hop_ports") or "", hport):
+                for p in chosen:
+                    if lo <= opts[p + "_port"] <= hi and p in ("tuic", "ss", "naive", "masque"):
+                        return jerr(f"Порт {sb.NAMES[p]} {opts[p + '_port']} попадает в диапазон port hopping {lo}-{hi}")
+        except hy.HyError:
+            pass
     audit(request, "server.provision_sb", f"id={sid} {json.dumps(opts)}")
     jid = worker.run_job("sing-box", sid, lambda log: sb.provision(sid, opts, log))
     return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
+
+
+@r.post("/api/servers/{sid}/update-sb")
+async def api_update_sb(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    from . import sb
+    audit(request, "server.update_sb", f"id={sid}")
+    jid = worker.run_job("update sing-box", sid, lambda log: sb.update(sid, log))
+    return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
+
+
+@r.post("/api/servers/{sid}/hop")
+async def api_hop(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    ok, res = await call(hy.apply_hop, sid)
+    audit(request, "server.hop", f"id={sid} {res[:200] if isinstance(res, str) else ''}")
+    return jok(msg=res) if ok else jerr(res)
 
 
 @r.post("/api/servers/{sid}/update-core")
@@ -1056,7 +1080,7 @@ def _safe_fn(s: str) -> str:
 
 def _proto_arg(request: Request, s: dict) -> str:
     p = request.query_params.get("p", "hy2")
-    if p not in clients.protos(s):
+    if p not in clients.uri_protos(s):
         raise HTTPException(404)
     return p
 
@@ -1074,6 +1098,16 @@ async def user_hy_yaml(uid: int, sid: int, sess: dict = Depends(session_dep)):
         raise HTTPException(404)
     fn = _safe_fn(clients.profile_name(u, s)) + ".yaml"
     return PlainTextResponse(clients.hysteria_yaml(u, s), media_type="application/x-yaml",
+                             headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+
+
+@r.get("/users/{uid}/masque/{sid}.json")
+async def user_masque_json(uid: int, sid: int, sess: dict = Depends(session_dep)):
+    u, s = _user_server(uid, sid)
+    if "masque" not in clients.protos(s):
+        raise HTTPException(404)
+    fn = _safe_fn(clients.profile_name(u, s)) + "-masque.json"
+    return PlainTextResponse(clients.masque_json(u, s), media_type="application/json",
                              headers={"Content-Disposition": f'attachment; filename="{fn}"'})
 
 
@@ -1557,6 +1591,17 @@ async def my_hy_yaml(uid: int, sid: int, cs: dict = Depends(client_dep)):
         raise HTTPException(404)
     fn = _safe_fn(clients.profile_name(u, s)) + ".yaml"
     return PlainTextResponse(clients.hysteria_yaml(u, s), media_type="application/x-yaml",
+                             headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+
+
+@pr.get("/masque/{uid}/{sid}.json")
+async def my_masque_json(uid: int, sid: int, cs: dict = Depends(client_dep)):
+    u = _owned_profile(cs, uid)
+    s = next((x for x in _profile_servers(uid) if x["id"] == sid), None)
+    if not s or "masque" not in clients.protos(s):
+        raise HTTPException(404)
+    fn = _safe_fn(clients.profile_name(u, s)) + "-masque.json"
+    return PlainTextResponse(clients.masque_json(u, s), media_type="application/json",
                              headers={"Content-Disposition": f'attachment; filename="{fn}"'})
 
 

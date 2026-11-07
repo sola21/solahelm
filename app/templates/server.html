@@ -3,6 +3,7 @@
 {% block title %}{{ s.name }} · {{ brand }}{% endblock %}
 {% block content %}
 {% set st = s.st %}{% set info = s.info %}
+{% set sb_main = s.vless_enabled or s.vgrpc_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}
 <div class="head">
   <h1>{{ s.name }} {{ svc_badge(st) }} {{ sync_badge(s) }}</h1>
   <div class="actions">
@@ -32,7 +33,8 @@
       <dt>Ключ хоста</dt><dd class="mono small">{{ hostkey_fp or 'ещё не получен' }}</dd>
       <dt>ОС</dt><dd>{{ st.os or '—' }}</dd>
       {% if s.hy2_enabled %}<dt>Hysteria</dt><dd>{{ st.version or '—' }} · служба {{ st.active or '?' }}/{{ st.enabled or '?' }}</dd>{% endif %}
-      {% if s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}<dt>sing-box</dt><dd>{{ st.sb_version or '—' }} · служба {{ st.sb_active or '?' }}</dd>{% endif %}
+      {% if sb_main %}<dt>sing-box</dt><dd>{{ st.sb_version or '—' }} · служба {{ st.sb_active or '?' }}</dd>{% endif %}
+      {% if s.masque_enabled %}<dt>MASQUE</dt><dd>sing-box {{ st.mq_version or '—' }} · служба {{ st.mq_active or '?' }}</dd>{% endif %}
       <dt>Запущена</dt><dd>{{ st.since or '—' }}</dd>
       <dt>Аптайм ОС</dt><dd>{{ st.uptime|dur if st.uptime else '—' }}</dd>
       <dt>Нагрузка</dt><dd>{{ st.load or '—' }}{% if st.cpus %} ({{ st.cpus }} CPU){% endif %}</dd>
@@ -50,6 +52,8 @@
       <dt>SNI</dt><dd>{{ endpoint.sni or '—' }}{% if endpoint.insecure %} <span class="badge warn">insecure</span>{% endif %}</dd>
       <dt>TLS</dt><dd>{{ info.tls or '—' }}{% if info.domains %} · {{ info.domains|join(', ') }}{% endif %}</dd>
       <dt>Auth</dt><dd>{{ info.auth_type or '—' }} · в конфиге {{ (info.users or {})|length }} польз.</dd>
+      <dt>Port hopping</dt><dd>{% if s.hop_applied %}<span class="badge ok">на сервере: UDP {{ s.hop_applied|replace(':', '–')|replace(',', ', ') }}</span>{% elif s.hop_ports %}<span class="badge warn">задан для клиентов ({{ s.hop_ports }}), на сервере не применён</span>{% else %}нет{% endif %}
+        {% if s.hy2_enabled and (s.hop_ports or s.hop_applied) %}<div class="btns"><button class="btn sm" data-api="/api/servers/{{ s.id }}/hop" data-reload="1500" data-confirm="{{ 'Перенаправить на сервере UDP-порты ' ~ s.hop_ports ~ ' на порт Hysteria (iptables) и открыть их в ufw?' if s.hop_ports else 'Убрать правила port hopping с сервера?' }}">{{ 'Применить на сервере' if s.hop_ports else 'Убрать с сервера' }}</button></div>{% endif %}</dd>
       <dt>Obfs</dt><dd>{{ 'salamander' if info.obfs else 'нет' }}</dd>
       <dt>Masquerade</dt><dd>{{ info.masquerade or 'нет' }}</dd>
       <dt>trafficStats</dt><dd>{{ '127.0.0.1:' ~ info.stats_port if info.stats_port else 'выключен' }}</dd>
@@ -98,17 +102,20 @@
     <button class="btn" data-api="/api/servers/{{ s.id }}/service/start">Старт</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/service/stop" data-confirm="Остановить hysteria на {{ s.name }}?">Стоп</button>
     <button class="btn" data-logs="/api/servers/{{ s.id }}/logs">Журнал Hysteria</button>
-    {% if s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}<button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=sb">Журнал sing-box</button>{% endif %}
+    {% if sb_main %}<button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=sb">Журнал sing-box</button>{% endif %}
+    {% if s.masque_enabled %}<button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=mq">Журнал MASQUE</button>{% endif %}
     {% if s.hy2_enabled %}
     <button class="btn" data-config="/api/servers/{{ s.id }}/config" data-save="/api/servers/{{ s.id }}/config" data-title="Hysteria2: {{ s.config_path }}">Конфиг Hysteria (YAML)</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/rollback" data-confirm="Восстановить предыдущий config.yaml из последнего бэкапа и перезапустить службу?">Откатить Hysteria</button>
     {% endif %}
-    {% if s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}
+    {% if sb_main %}
     <button class="btn" data-config="/api/servers/{{ s.id }}/sbconfig" data-save="/api/servers/{{ s.id }}/sbconfig" data-title="sing-box (VLESS / AnyTLS): {{ s.sb_config_path }}">Конфиг VLESS / AnyTLS (JSON)</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=sb" data-confirm="Восстановить предыдущий конфиг sing-box из последнего бэкапа и перезапустить службу?">Откатить sing-box</button>
     {% endif %}
+    {% if s.masque_enabled %}<button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=mq" data-confirm="Восстановить предыдущий конфиг MASQUE из последнего бэкапа и перезапустить службу?">Откатить MASQUE</button>{% endif %}
     <button class="btn" data-api="/api/servers/{{ s.id }}/masq" data-confirm="Заменить сайт-заглушку на сервере страницей входа в роутер? Прежний файл index.html будет перезаписан.">Обновить заглушку</button>
-    <button class="btn" data-job="/api/servers/{{ s.id }}/update-core" data-confirm="Обновить Hysteria2 до последней версии (get.hy2.sh) и перезапустить?">Обновить Hysteria</button>
+    {% if s.hy2_enabled %}<button class="btn" data-job="/api/servers/{{ s.id }}/update-core" data-confirm="Обновить Hysteria2 до последней версии (get.hy2.sh) и перезапустить?">Обновить Hysteria</button>{% endif %}
+    {% if sb_main or s.masque_enabled %}<button class="btn" data-job="/api/servers/{{ s.id }}/update-sb" data-confirm="Обновить sing-box до последней стабильной версии{{ ' (и sing-box для MASQUE — до последней 1.15+)' if s.masque_enabled }} и перезапустить? Клиенты переподключатся.">Обновить sing-box</button>{% endif %}
     {% if s.ssh_auth == 'password' %}<button class="btn" data-api="/api/servers/{{ s.id }}/install-key" data-confirm="Добавить ключ панели в authorized_keys и перейти на вход по ключу?" data-reload="1500">Установить ключ панели</button>{% endif %}
     {% if s.host_key %}<button class="btn ghost" data-api="/api/servers/{{ s.id }}/reset-hostkey" data-confirm="Сбросить сохранённый ключ хоста? Делайте это только если VPS переустановлен." data-reload="800">Сбросить ключ хоста</button>{% endif %}
   </div>
@@ -200,23 +207,32 @@
     QUIC (Hysteria2, TUIC), TLS на вашем домене (AnyTLS, Trojan), маскировка под чужой сайт (VLESS Reality), обычный шифрованный поток (Shadowsocks).
     Порты 80 и 443 (TCP) занимает Hysteria2, поэтому у остальных порты по умолчанию другие. Ключи Reality и Shadowsocks панель генерирует сама.
     После установки профили синхронизируются автоматически, как и для Hysteria2.</p>
-  {% if s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}
+  {% if sb_main or s.masque_enabled %}
   <p class="small">Сейчас включено:
     {% if s.vless_enabled %}<span class="badge ok">VLESS Reality :{{ s.vless_port }} → {{ s.reality_sni }}</span>{% endif %}
+    {% if s.vgrpc_enabled %}<span class="badge ok">VLESS gRPC :{{ s.vgrpc_port }} → {{ s.reality_sni }}</span>{% endif %}
+    {% if s.masque_enabled %}<span class="badge warn">MASQUE :{{ s.masque_port }} UDP+TCP</span>{% endif %}
     {% if s.anytls_enabled %}<span class="badge ok">AnyTLS :{{ s.anytls_port }}</span>{% endif %}
     {% if s.trojan_enabled %}<span class="badge ok">Trojan :{{ s.trojan_port }}</span>{% endif %}
     {% if s.tuic_enabled %}<span class="badge ok">TUIC :{{ s.tuic_port }} UDP</span>{% endif %}
     {% if s.naive_enabled %}<span class="badge ok">Naive :{{ s.naive_port }}</span>{% endif %}
     {% if s.ss_enabled %}<span class="badge ok">Shadowsocks-2022 :{{ s.ss_port }}</span>{% endif %}
-    {% if (s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.naive_enabled) %}<span class="badge">{{ s.anytls_domain }}{{ ' · самоподписанный' if s.anytls_insecure }}</span>{% endif %}</p>
+    {% if (s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.naive_enabled or s.masque_enabled) %}<span class="badge">{{ s.anytls_domain }}{{ ' · самоподписанный' if s.anytls_insecure }}</span>{% endif %}</p>
   {% endif %}
+  {% if (s.vless_enabled or s.vgrpc_enabled) and sni_brand %}<div class="flash warn"><b>Маскировка Reality под {{ s.reality_sni }} — легко вычисляется.</b>
+    С 2026 года ТСПУ проверяет, принадлежит ли IP сервера той компании, под чей сайт маскируется Reality: у Microsoft, Apple, Google и других крупных брендов
+    свои сети, и VPS с таким SNI сразу выглядит подозрительно. Лучше выбрать неброский сайт с TLS 1.3, желательно у того же хостера или в той же стране, что и сервер.</div>{% endif %}
   <form id="provision-sb" class="form" data-persist="prov-sb-{{ s.id }}" data-url="/api/servers/{{ s.id }}/provision-sb">
     <fieldset>
-      <legend>VLESS + Reality (TCP)</legend>
-      <label class="check"><input type="checkbox" name="vless" {{ 'checked' if s.vless_enabled }}> Включить VLESS (xtls-rprx-vision, Reality): без домена и сертификата, маскируется под чужой сайт</label>
+      <legend>VLESS + Reality: TCP и gRPC</legend>
+      <label>Домен для маскировки (сайт с TLS 1.3)<input name="reality_sni" value="{{ s.reality_sni if (s.vless_enabled or s.vgrpc_enabled or s.reality_sni != 'www.microsoft.com') else '' }}" placeholder="неброский сайт, например у того же хостера"><small>Reality выдаёт себя за этот сайт, домен не ваш. Не берите microsoft/apple/google — см. предупреждение выше</small></label>
       <div class="row">
+        <label class="check"><input type="checkbox" name="vless" {{ 'checked' if s.vless_enabled }}> VLESS Reality (TCP, xtls-rprx-vision): без домена и сертификата. С 2026 года на многих провайдерах РФ режется</label>
         <label>Порт (TCP)<input name="vless_port" type="number" min="1" max="65535" value="{{ s.vless_port or 8443 }}"></label>
-        <label>Домен для маскировки (сайт с TLS 1.3)<input name="reality_sni" value="{{ s.reality_sni or 'www.microsoft.com' }}"><small>Reality выдаёт себя за этот сайт, домен не ваш</small></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="vgrpc" {{ 'checked' if s.vgrpc_enabled }}> VLESS Reality gRPC (TCP, HTTP/2): те же ключи, но другой рисунок трафика — проходит там, где обычный VLESS режут</label>
+        <label>Порт (TCP)<input name="vgrpc_port" type="number" min="1" max="65535" value="{{ s.vgrpc_port or 8445 }}"></label>
       </div>
     </fieldset>
     <fieldset>
@@ -254,9 +270,20 @@
         <label>Порт<input name="ss_port" type="number" min="1" max="65535" value="{{ s.ss_port or 2443 }}"></label>
       </div>
     </fieldset>
+    <fieldset>
+      <legend>MASQUE (экспериментально)</legend>
+      <p class="small muted">VPN поверх HTTP/3 (стандарт RFC 9484, так работают Cloudflare WARP и iCloud Private Relay): снаружи выглядит как обычный
+        сайт на QUIC. Есть только в sing-box 1.15 — пока это альфа-версия, поэтому MASQUE работает отдельной службой со своей копией sing-box,
+        и сбой в ней не затронет остальные протоколы. Использует домен и сертификат TLS-протоколов выше. Клиент — только приложение sing-box 1.15+:
+        ссылки нет, профиль получает файл конфига (JSON).</p>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="masque" {{ 'checked' if s.masque_enabled }}> Включить MASQUE</label>
+        <label>Порт (UDP + TCP)<input name="masque_port" type="number" min="1" max="65535" value="{{ s.masque_port or 5443 }}"></label>
+      </div>
+    </fieldset>
     <label class="check"><input type="checkbox" name="ufw" checked> Открыть порты в ufw</label>
     <label class="check"><input type="checkbox" name="assign_all"> Привязать к серверу все профили панели</label>
-    <div class="btns"><button class="btn primary">{{ 'Применить / переустановить' if (s.vless_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled) else 'Установить sing-box' }}</button></div>
+    <div class="btns"><button class="btn primary">{{ 'Применить / переустановить' if (sb_main or s.masque_enabled) else 'Установить sing-box' }}</button></div>
   </form>
 </section>
 

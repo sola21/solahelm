@@ -161,6 +161,13 @@ SERVER_COLS = {
     "ss_key": "TEXT DEFAULT ''",                   # ключ сервера Shadowsocks-2022 (зашифрован)
     "f2b_ignore": "TEXT DEFAULT ''",               # защита SSH: доп. IP/сети, которые fail2ban не банит
     "guard_cache": "TEXT DEFAULT ''",              # защита SSH: последнее полученное состояние (JSON)
+    # 1.12.0
+    "vgrpc_enabled": "INTEGER DEFAULT 0",          # VLESS Reality поверх gRPC (ключи и SNI общие с VLESS)
+    "vgrpc_port": "INTEGER DEFAULT 8445",
+    "grpc_service": "TEXT DEFAULT ''",             # имя gRPC-сервиса (случайное, создаётся один раз)
+    "masque_enabled": "INTEGER DEFAULT 0",         # MASQUE (CONNECT-IP, HTTP/3) — отдельная служба sing-box 1.15+
+    "masque_port": "INTEGER DEFAULT 5443",         # UDP (HTTP/3) + TCP (HTTP/2)
+    "hop_applied": "TEXT DEFAULT ''",              # диапазон port hopping, применённый на сервере
 }
 
 
