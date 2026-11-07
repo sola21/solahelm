@@ -29,7 +29,7 @@ Bilingual interface (**English / Русский**) with a language switch on eve
   traffic stats API, ufw) and/or sing-box with VLESS Reality (TCP and gRPC), AnyTLS, Trojan, TUIC v5, Shadowsocks-2022, Naive and MASQUE (fallback protocols if one gets blocked). Live install log. One-click sing-box update, server-side port hopping for Hysteria2.
 - **Profiles:** create / edit / disable / delete, expiry date, traffic limit, per-profile access to chosen servers
   (matrix page "Access"). Changes are pushed to server configs automatically, with verification and rollback.
-- **Client artifacts:** `hysteria2://`, `vless://`, `anytls://`, `trojan://`, `tuic://`, `ss://`, `naive+https://` links, QR codes (SVG / PNG), Hysteria YAML, sing-box JSON for MASQUE,
+- **Client artifacts:** `hysteria2://`, `vless://`, `anytls://`, `trojan://`, `tuic://`, `ss://`, `naive+https://` links, QR codes (SVG / PNG), Hysteria YAML, sing-box JSON for MASQUE, a sing-box subscription (`/sub/<token>/singbox`, all protocols with auto-select),
   Clash Meta / mihomo YAML, and a **subscription URL** (base64 and Clash format) with traffic/expiry headers.
 - **Routing templates** for Clash/mihomo (DNS, TUN, rule providers, rules). Upload any ready-made mihomo config;
   the panel keeps routing and injects your servers. Two presets included.

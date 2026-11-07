@@ -29,7 +29,7 @@
   trafficStats API, ufw) и/или sing-box с VLESS Reality (TCP и gRPC), AnyTLS, Trojan, TUIC v5, Shadowsocks-2022, Naive и MASQUE (запасные протоколы на случай блокировки). Лог установки в реальном времени. Обновление sing-box одной кнопкой, port hopping для Hysteria2 на стороне сервера.
 - **Профили:** создание, редактирование, отключение, удаление, срок, лимит трафика, доступ к выбранным серверам
   (матрица «Доступ»). Изменения сами уходят в конфиги серверов с проверкой и откатом.
-- **Для клиентов:** ссылки `hysteria2://`, `vless://`, `anytls://`, `trojan://`, `tuic://`, `ss://`, `naive+https://`, QR (SVG / PNG), YAML для Hysteria и Clash Meta / mihomo, JSON sing-box для MASQUE,
+- **Для клиентов:** ссылки `hysteria2://`, `vless://`, `anytls://`, `trojan://`, `tuic://`, `ss://`, `naive+https://`, QR (SVG / PNG), YAML для Hysteria и Clash Meta / mihomo, JSON sing-box для MASQUE, подписка для sing-box (`/sub/<токен>/singbox`, все протоколы с автовыбором),
   **ссылка подписки** (base64 и Clash) с заголовками трафика и срока.
 - **Шаблоны маршрутизации** для Clash/mihomo (DNS, TUN, наборы правил, правила). Загрузите любой готовый конфиг mihomo:
   панель сохранит маршрутизацию и подставит ваши серверы. Два готовых шаблона в комплекте.
