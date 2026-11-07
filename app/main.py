@@ -1152,6 +1152,16 @@ async def sub_clash(request: Request, token: str):
                              headers=clients.sub_headers(u))
 
 
+@pr.get("/sub/{token}/masque/{sid}.json")
+async def sub_masque(request: Request, token: str, sid: int):
+    """Конфиг MASQUE по ссылке подписки — для «удалённого профиля» в приложении sing-box (обновляется само)."""
+    u, servers = _sub_user(token)
+    s = next((x for x in servers if x["id"] == sid), None)
+    if not s or "masque" not in clients.protos(s):
+        raise HTTPException(404)
+    return PlainTextResponse(clients.masque_json(u, s), media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
 # ---------------- настройки ----------------
 @r.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, sess: dict = Depends(session_dep)):
@@ -1656,6 +1666,7 @@ def _legacy_target(path: str) -> str | None:
 for _lb in LEGACY_BASES:
     app.add_api_route(_lb + "/sub/{token}", sub, methods=["GET"], include_in_schema=False)
     app.add_api_route(_lb + "/sub/{token}/clash", sub_clash, methods=["GET"], include_in_schema=False)
+    app.add_api_route(_lb + "/sub/{token}/masque/{sid}.json", sub_masque, methods=["GET"], include_in_schema=False)
 
     async def _legacy_redirect(request: Request, path: str = ""):
         target = _legacy_target(path)

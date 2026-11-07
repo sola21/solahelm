@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import user_badge, bar, conn_links %}
+{% from "_macros.html" import user_badge, bar, conn_links, client_apps %}
 {% block title %}Мои подключения{% endblock %}
 {% block content %}
 <div class="head"><h1>Мои подключения</h1></div>
@@ -23,10 +23,11 @@
   <details class="howto">
     <summary>Как подключиться</summary>
     <ol class="small">
-      <li>Установите приложение: <b>Hiddify</b> (Android, iOS, Windows, macOS), <b>v2rayN</b> (Windows), <b>Streisand</b> или <b>V2Box</b> (iOS), <b>Clash Verge</b> / <b>FlClash</b>.</li>
+      <li>Установите приложение (названия — ссылки на страницы загрузки):{{ client_apps() }}</li>
       <li>Проще всего добавить <b>подписку</b>: скопируйте ссылку или отсканируйте QR ниже. При изменении серверов приложение обновит их само.</li>
       <li>Можно добавить и отдельный сервер: по ссылке или по QR. На сервере может быть несколько протоколов
-        (<b>Hysteria2</b>, <b>VLESS Reality</b>, <b>AnyTLS</b>) — используйте любой. Если один не работает в вашей сети, попробуйте другой.</li>
+        (Hysteria2, VLESS Reality, VLESS gRPC, AnyTLS, Trojan, TUIC, Shadowsocks, Naive, MASQUE) — используйте любой.
+        Если один не работает в вашей сети, попробуйте другой: чаще всего выручают <b>Hysteria2</b> и <b>VLESS gRPC</b>.</li>
     </ol>
   </details>
 
@@ -47,7 +48,7 @@
   {% for s in u.conns %}
     <div class="card conn inner">
       <div class="srv-head"><b>{{ s.name }}</b></div>
-      {{ conn_links(s.links, u.id, s.id, 'my') }}
+      {{ conn_links(s.links, u.id, s.id, 'my', u.sub_url) }}
     </div>
   {% endfor %}
   </div>

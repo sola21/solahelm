@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import user_badge, bar, svc_badge, conn_links %}
+{% from "_macros.html" import user_badge, bar, svc_badge, conn_links, client_apps %}
 {% block title %}{{ u.username }} · {{ brand }}{% endblock %}
 {% block content %}
 <div class="head">
@@ -37,7 +37,7 @@
 
   <section class="card">
     <h3>Подписка (все серверы профиля)</h3>
-    <p class="small muted">Для Hiddify, v2rayN, v2rayNG, Streisand, NekoBox, Clash Verge / FlClash (Clash-формат). Клиент сам подтянет изменения серверов.</p>
+    <p class="small muted">Клиент сам подтянет изменения серверов. Вторая ссылка — Clash-формат. Приложения:</p>{{ client_apps() }}
     <div class="qrwrap">{{ sub_qr|safe }}</div>
     <div class="copyline"><code id="sub">{{ sub_url }}</code><button class="btn sm" data-copy="#sub">Копировать</button></div>
     <div class="copyline"><code id="subc">{{ sub_url }}/clash</code><button class="btn sm" data-copy="#subc">Копировать</button></div>
@@ -54,7 +54,7 @@
 {% for s in servers %}
   <section class="card conn">
     <div class="srv-head"><b><a href="{{ base }}/servers/{{ s.id }}">{{ s.name }}</a></b> {{ svc_badge(s.st) }}{% if s.u_online %} <span class="badge ok">онлайн: {{ s.u_online }}</span>{% endif %}</div>
-    {{ conn_links(s.links, u.id, s.id, 'admin') }}
+    {{ conn_links(s.links, u.id, s.id, 'admin', sub_url) }}
     <div class="small muted">Трафик здесь: {{ (s.u_tx + s.u_rx)|bytes }} · был онлайн {{ s.u_last|ago }}</div>
   </section>
 {% endfor %}

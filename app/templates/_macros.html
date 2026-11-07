@@ -20,15 +20,32 @@
 
 {# Ссылки, QR и файлы для одного профиля на одном сервере: по блоку на каждый протокол.
    area: 'admin' (страница профиля) или 'my' (кабинет клиента) #}
-{% macro conn_links(links, uid, sid, area) -%}
+{% macro conn_links(links, uid, sid, area, sub_url='') -%}
 <div class="protos">
 {% for l in links %}
   {% set eid = 'l' ~ uid ~ '_' ~ sid ~ '_' ~ l.proto %}
   <div class="proto">
     <div class="proto-head"><span class="badge {{ {'hy2':'','vless':'ok','vgrpc':'ok','anytls':'warn','trojan':'ok','tuic':'warn','ss':'','naive':'ok','masque':'warn'}.get(l.proto, '') }}">{{ l.label }}</span></div>
     {% if l.proto == 'masque' %}
-    <p class="small muted">У MASQUE нет ссылки и QR-кода. Скачайте конфиг и импортируйте его в приложение <b>sing-box</b> версии 1.15 или новее (пока это бета: Android — файл SFA с GitHub, Windows/Linux — sing-box run -c файл.json). Clash, v2rayNG и Hiddify MASQUE пока не поддерживают.</p>
-    <div class="btns"><a class="btn sm primary" href="{{ (base ~ '/users/%d/masque/%d.json'|format(uid, sid)) if area == 'admin' else (pub ~ '/masque/%d/%d.json'|format(uid, sid)) }}">Скачать конфиг sing-box (JSON)</a></div>
+    <p class="small muted">У MASQUE нет обычной ссылки и QR-кода: он работает только в официальном приложении
+      <a href="https://github.com/SagerNet/sing-box/releases" target="_blank" rel="noopener">sing-box</a> версии 1.15 или новее
+      (пока это бета). Clash, v2rayNG, v2rayN и Hiddify MASQUE не поддерживают.</p>
+    {% if sub_url %}<div class="copyline"><code id="{{ eid }}" class="wrapcode">{{ sub_url }}/masque/{{ sid }}.json</code></div>{% endif %}
+    <div class="btns">
+      {% if sub_url %}<button class="btn sm primary" data-copy="#{{ eid }}">Копировать ссылку профиля</button>{% endif %}
+      <a class="btn sm" href="{{ (base ~ '/users/%d/masque/%d.json'|format(uid, sid)) if area == 'admin' else (pub ~ '/masque/%d/%d.json'|format(uid, sid)) }}">Скачать конфиг (JSON)</a>
+    </div>
+    <details class="howto"><summary>Как подключиться по MASQUE</summary>
+      <ol class="small">
+        <li>Установите sing-box 1.15+ со страницы <a href="https://github.com/SagerNet/sing-box/releases" target="_blank" rel="noopener">GitHub Releases</a>
+          (раскройте «Assets» у верхней версии 1.15): Android — <code>SFA-…-universal.apk</code>, Windows — <code>SFW-…-x64.exe</code>.
+          На iOS в App Store пока версия 1.14 — MASQUE там заработает после выхода 1.15.</li>
+        <li>В приложении: <b>Profiles</b> → <b>New Profile</b> → Type <b>Remote</b>, в URL вставьте ссылку профиля выше
+          (приложение само будет её обновлять). Или Type <b>Local</b> → Import и выберите скачанный JSON.</li>
+        <li>Выберите профиль на вкладке <b>Dashboard</b> и нажмите <b>Start</b> (на Android разрешите VPN). Проверка — сайт 2ip.ru или ifconfig.me должен показать IP сервера.</li>
+        <li>Не подключается — значит, у хостера закрыт порт MASQUE (UDP и TCP) во внешнем файрволе или провайдер режет QUIC.</li>
+      </ol>
+    </details>
     {% else %}
     <div class="qrwrap">{{ l.qr|safe }}</div>
     <div class="copyline"><code id="{{ eid }}" class="wrapcode">{{ l.uri }}</code></div>
@@ -58,4 +75,19 @@
 {% macro sync_badge(s) -%}
 {% if s.sync_error %}<span class="badge err" title="{{ s.sync_error }}">ошибка синхр.</span>
 {% elif s.dirty %}<span class="badge warn">ожидает синхр.</span>{% endif %}
+{%- endmacro %}
+
+{% macro client_apps() -%}
+<ul class="small apps">
+  <li><a href="https://github.com/hiddify/hiddify-app/releases" target="_blank" rel="noopener"><b>Hiddify</b></a> — Android, iOS, Windows, macOS, Linux; понимает почти все протоколы, кроме MASQUE</li>
+  <li><a href="https://github.com/2dust/v2rayNG/releases" target="_blank" rel="noopener"><b>v2rayNG</b></a> — Android;
+    <a href="https://github.com/2dust/v2rayN/releases" target="_blank" rel="noopener"><b>v2rayN</b></a> — Windows, macOS, Linux</li>
+  <li><a href="https://apps.apple.com/app/streisand/id6450534064" target="_blank" rel="noopener"><b>Streisand</b></a> или
+    <a href="https://apps.apple.com/app/v2box-v2ray-client/id6446814690" target="_blank" rel="noopener"><b>V2Box</b></a> — iPhone, iPad</li>
+  <li><a href="https://github.com/clash-verge-rev/clash-verge-rev/releases" target="_blank" rel="noopener"><b>Clash Verge Rev</b></a> — Windows, macOS, Linux;
+    <a href="https://github.com/chen08209/FlClash/releases" target="_blank" rel="noopener"><b>FlClash</b></a> — Android, Windows, macOS, Linux
+    (для них — вторая ссылка подписки, Clash; Naive и MASQUE в Clash нет)</li>
+  <li><a href="https://github.com/MatsuriDayo/NekoBoxForAndroid/releases" target="_blank" rel="noopener"><b>NekoBox</b></a> — Android</li>
+  <li><a href="https://github.com/SagerNet/sing-box/releases" target="_blank" rel="noopener"><b>sing-box</b></a> (официальный клиент: Android, Windows, iOS) — нужен только для MASQUE</li>
+</ul>
 {%- endmacro %}

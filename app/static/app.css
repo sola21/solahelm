@@ -154,6 +154,7 @@ h4{font-size:13px;margin:14px 0 6px;color:var(--muted)}
 details>summary{cursor:pointer;color:var(--accent);margin:4px 0 8px}
 details.card>summary{color:var(--text)}
 .howto ol{margin:6px 0 12px;padding-left:20px}.howto li{margin-bottom:4px}
+.apps{margin:4px 0 8px;padding-left:18px}.apps li{margin-bottom:3px}.proto .howto{margin-top:8px}.proto .howto ol{padding-left:18px}
 
 /* узкий экран (телефон, планшет): шапка в две строки — логотип и «Выйти» сверху, меню одной строкой с прокруткой вбок */
 @media (max-width:900px){
