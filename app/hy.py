@@ -281,13 +281,31 @@ def sync_server(sid: int) -> dict:
             raise
 
 
+def _sb_users(s: dict, c: Conn) -> dict:
+    """Пользователи с паролем из inbound'ов sing-box (AnyTLS, Trojan, Naive, TUIC): {имя: пароль}."""
+    from . import sb
+    try:
+        cfg = json.loads(c.read_file(s["sb_config_path"]))
+    except (SSHError, ValueError):
+        return {}
+    return sb.users_from_config(cfg)
+
+
 def import_users(sid: int) -> dict:
     s = get_server(sid)
+    from . import sb
+    users, info = {}, None
     with Conn(s) as c:
-        text = c.read_file(s["config_path"])
-    info = cfg_info(load_cfg(text))
+        if s["hy2_enabled"]:
+            info = cfg_info(load_cfg(c.read_file(s["config_path"])))
+            users.update(info["users"])
+        if sb.enabled(s):
+            for name, pw in _sb_users(s, c).items():
+                users.setdefault(name, pw)
+        if not s["hy2_enabled"] and not sb.enabled(s):
+            raise HyError("На сервере не включена ни одна служба, импортировать нечего")
     created, linked, conflicts = [], [], []
-    for name, pw in info["users"].items():
+    for name, pw in users.items():
         if name == PLACEHOLDER_USER:
             continue
         if not USERNAME_RE.match(name):
@@ -302,9 +320,10 @@ def import_users(sid: int) -> dict:
             uid = u["id"]
             linked.append(name)
         db.ex("INSERT OR IGNORE INTO user_servers(user_id,server_id) VALUES(?,?)", (uid, sid))
-    db.ex("UPDATE servers SET cfg_info=? WHERE id=?", (json.dumps(info), sid))
-    if info["auth_type"] != "userpass":
-        conflicts.append(f"auth.type = {info['auth_type'] or 'нет'}: при синхронизации будет заменён на userpass")
+    if info is not None:
+        db.ex("UPDATE servers SET cfg_info=? WHERE id=?", (json.dumps(info), sid))
+        if info["auth_type"] != "userpass":
+            conflicts.append(f"auth.type = {info['auth_type'] or 'нет'}: при синхронизации будет заменён на userpass")
     return {"created": created, "linked": linked, "conflicts": conflicts}
 
 
@@ -360,6 +379,9 @@ echo "os=$(. /etc/os-release 2>/dev/null; echo $PRETTY_NAME)"
 IF=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
 echo "iface=$IF"
 echo "net=$(grep "$IF:" /proc/net/dev | sed 's/.*://' | awk '{print $1" "$9}')"
+echo "ipv6_off=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)"
+echo "ipv6_addrs=$(ip -6 addr show scope global 2>/dev/null | grep -c inet6)"
+echo "ipv6_cfg=$([ -f /etc/sysctl.d/99-solahelm-ipv6.conf ] && echo 1 || echo 0)"
 SB=__SBSVC__
 if [ -n "$SB" ]; then
   echo "sb_active=$(systemctl is-active $SB 2>/dev/null)"
@@ -400,6 +422,18 @@ def fail_threshold() -> int:
         return FAIL_THRESHOLD_DEFAULT
 
 
+def overall_state(svcs: list[dict]) -> str:
+    """Общее состояние по службам: active — все работают, partial — часть работает, иначе состояние первой службы."""
+    states = [x["active"] for x in svcs]
+    if not states:
+        return ""
+    if all(v == "active" for v in states):
+        return "active"
+    if any(v == "active" for v in states):
+        return "partial"
+    return next((v for v in states if v), "inactive")
+
+
 def _poll_once(s: dict, prev: dict, now: int):
     """Один опрос сервера по SSH: (статус, online, traffic, cfg_info). status['ok'] — удался ли опрос."""
     st: dict = {"ts": now, "ok": False}
@@ -420,6 +454,9 @@ def _poll_once(s: dict, prev: dict, now: int):
                       version=kv.get("version", ""), os=kv.get("os", ""), iface=kv.get("iface", ""),
                       load=kv.get("load", ""), cpus=int(kv.get("cpus") or 0))
             st["uptime"] = int(float(kv.get("uptime") or 0))
+            # IPv6: "" — в ядре нет поддержки; off=True — отключён sysctl'ом (нашим или чужим), addrs — глобальных адресов
+            st["ipv6"] = {"supported": kv.get("ipv6_off", "") in ("0", "1"), "off": kv.get("ipv6_off") == "1",
+                          "addrs": int(kv.get("ipv6_addrs") or 0), "ours": kv.get("ipv6_cfg") == "1"}
             mem, disk, net = _ints(kv.get("mem", "")), _ints(kv.get("disk", "")), _ints(kv.get("net", ""))
             if len(mem) == 2:
                 st["mem_total"], st["mem_used"] = mem
@@ -431,16 +468,25 @@ def _poll_once(s: dict, prev: dict, now: int):
                 if prev.get("net_rx") is not None and 0 < dt < 3600 and net[0] >= prev["net_rx"]:
                     st["rate_rx"] = (net[0] - prev["net_rx"]) / dt
                     st["rate_tx"] = (net[1] - prev["net_tx"]) / dt
+            # состояние каждой службы отдельно: сервер «в порядке», если работает хотя бы одна из включённых
+            svcs = []
+            if s["hy2_enabled"]:
+                svcs.append({"key": "hy", "name": "Hysteria2", "active": kv.get("active", ""), "version": kv.get("version", "")})
+            if sb.enabled(s):
+                svcs.append({"key": "sb", "name": "sing-box", "active": kv.get("sb_active", ""), "version": kv.get("sb_version", "")})
+            if s.get("masque_enabled"):
+                svcs.append({"key": "mq", "name": "MASQUE", "active": kv.get("mq_active", ""), "version": kv.get("mq_version", "")})
+            st["svcs"] = svcs
+            hy_active = kv.get("active", "") if s["hy2_enabled"] else ""
+            st["active"] = overall_state(svcs)
             if not s["hy2_enabled"]:
-                # сервер только под sing-box: общее состояние берём у него, Hysteria не опрашиваем
-                st["active"] = st.get("sb_active", "") or st.get("mq_active", "")
                 st["version"] = st.get("sb_version", "") or st.get("mq_version", "")
             else:
                 try:
                     info = cfg_info(load_cfg(c.read_file(s["config_path"])))
                 except Exception as e:
                     st["cfg_error"] = str(e)[:300]
-            if info and info.get("stats_port") and st["active"] == "active":
+            if info and info.get("stats_port") and hy_active == "active":
                 try:
                     online = c.http_json(info["stats_port"], "GET", "/online", info.get("stats_secret", "")) or {}
                     traffic = c.http_json(info["stats_port"], "GET", "/traffic?clear=1",
@@ -563,16 +609,33 @@ def kick(sid: int, usernames: list[str]) -> None:
         c.http_json(info["stats_port"], "POST", "/kick", info.get("stats_secret", ""), usernames)
 
 
-def service_action(sid: int, op: str) -> str:
+def service_name(s: dict, which: str) -> str:
+    """Имя systemd-службы: hy — Hysteria2, sb — основная служба sing-box, mq — sing-box для MASQUE."""
+    from . import sb
+    if which == "sb":
+        if not sb.enabled(s):
+            raise HyError("sing-box на этом сервере не включён")
+        return s["sb_service"]
+    if which == "mq":
+        if not s.get("masque_enabled"):
+            raise HyError("MASQUE на этом сервере не включён")
+        return sb.MASQUE_SVC
+    if not s["hy2_enabled"]:
+        raise HyError("Hysteria2 на этом сервере не включена")
+    return s["service"]
+
+
+def service_action(sid: int, op: str, which: str = "hy") -> str:
     if op not in ("start", "stop", "restart"):
         raise HyError("Неизвестное действие")
     s = get_server(sid)
+    service = service_name(s, which)
     with server_lock(sid), Conn(s) as c:
         if op == "restart":
-            svc_restart_verify(c, s, rollback=False)
+            svc_restart_verify(c, s, rollback=False, service=service)
         else:
-            c.run(f"systemctl {op} {shlex.quote(s['service'])}", check=True, timeout=60)
-        return c.run(f"systemctl is-active {shlex.quote(s['service'])}")[1].strip()
+            c.run(f"systemctl {op} {shlex.quote(service)}", check=True, timeout=60)
+        return c.run(f"systemctl is-active {shlex.quote(service)}")[1].strip()
 
 
 def get_logs(sid: int, lines: int = 200, which: str = "hy") -> str:

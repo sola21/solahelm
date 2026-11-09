@@ -180,6 +180,63 @@ def unban(sid: int, ip: str) -> str:
 
 
 # ---------------- вход по паролю ----------------
+IPV6_CONF = "/etc/sysctl.d/99-solahelm-ipv6.conf"
+IPV6_KEYS = ("net.ipv6.conf.all.disable_ipv6", "net.ipv6.conf.default.disable_ipv6")
+
+
+def _panel_uses_ipv6(host: str) -> bool:
+    """Подключается ли панель к серверу по IPv6: адрес-литерал или имя без A-записи."""
+    import socket
+    try:
+        return ipaddress.ip_address(host.strip("[]")).version == 6
+    except ValueError:
+        pass
+    try:
+        socket.getaddrinfo(host, None, socket.AF_INET)
+        return False
+    except socket.gaierror:
+        return True
+
+
+def set_ipv6(sid: int, disable: bool) -> dict:
+    """Отключить (disable=True) или снова включить IPv6 на сервере через sysctl (файл переживает перезагрузку).
+    Отключение проверяется новым SSH-подключением, при неудаче откатывается через ещё открытое старое."""
+    with server_lock(sid):
+        s = get_server(sid)
+        if disable and _panel_uses_ipv6(s["host"]):
+            raise HyError("Панель подключается к этому серверу по IPv6 (адрес или имя без A-записи). "
+                          "Если его отключить, панель потеряет доступ. Сначала укажите IPv4-адрес сервера.")
+        q = shlex.quote
+        on_cmd = "sysctl -w " + " ".join(f"{k}=0" for k in IPV6_KEYS)
+        with Conn(s, timeout=20) as c:
+            code, out, _ = c.run("cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null", timeout=20)
+            if out.strip() not in ("0", "1"):
+                raise HyError("В ядре сервера нет поддержки IPv6 — отключать нечего")
+            if disable:
+                conf = ("# Created by SolaHelm: IPv6 disabled. Delete this file and run sysctl --system (or reboot) to enable it again.\n"
+                        + "".join(f"{k} = 1\n" for k in IPV6_KEYS))
+                code, out, err = c.run(f"mkdir -p /etc/sysctl.d && cat > {q(IPV6_CONF)} && chmod 644 {q(IPV6_CONF)} && "
+                                       f"sysctl -p {q(IPV6_CONF)}", input=conf, timeout=60)
+                if code != 0:
+                    c.run(f"rm -f {q(IPV6_CONF)}; {on_cmd}", timeout=60)
+                    raise HyError(f"Не удалось отключить IPv6, изменения откачены: {(err or out).strip()[-300:]}")
+                try:  # проверка: панель должна войти новым подключением
+                    with Conn(dict(s), timeout=20) as c2:
+                        c2.run("true", check=True, timeout=20)
+                except SSHError as e:
+                    c.run(f"rm -f {q(IPV6_CONF)}; {on_cmd}", timeout=60)
+                    raise HyError(f"После отключения IPv6 панель не смогла войти заново ({e}). Настройка откачена.")
+            else:
+                c.run(f"rm -f {q(IPV6_CONF)}; {on_cmd}", check=True, timeout=60)
+            code, out, _ = c.run("cat /proc/sys/net/ipv6/conf/all/disable_ipv6", timeout=20)
+    from . import hy
+    try:
+        hy.poll_server(sid)  # обновить состояние на странице
+    except Exception:
+        pass
+    return {"disabled": out.strip() == "1"}
+
+
 def _reload_sshd() -> str:
     return "systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || service ssh reload"
 

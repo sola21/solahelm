@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import svc_badge, bar, sync_badge, user_badge, uptime_strip %}
+{% from "_macros.html" import svc_badge, eng_badge, proto_badges, bar, sync_badge, user_badge, uptime_strip %}
 {% block title %}{{ s.name }} · {{ brand }}{% endblock %}
 {% block content %}
 {% set st = s.st %}{% set info = s.info %}
@@ -32,9 +32,9 @@
       <dt>SSH</dt><dd class="mono">{{ s.ssh_user }}@{{ s.host }}:{{ s.ssh_port }} · {{ {'panelkey':'ключ панели','password':'пароль','key':'свой ключ'}[s.ssh_auth] }}</dd>
       <dt>Ключ хоста</dt><dd class="mono small">{{ hostkey_fp or 'ещё не получен' }}</dd>
       <dt>ОС</dt><dd>{{ st.os or '—' }}</dd>
-      {% if s.hy2_enabled %}<dt>Hysteria</dt><dd>{{ st.version or '—' }} · служба {{ st.active or '?' }}/{{ st.enabled or '?' }}</dd>{% endif %}
-      {% if sb_main %}<dt>sing-box</dt><dd>{{ st.sb_version or '—' }} · служба {{ st.sb_active or '?' }}</dd>{% endif %}
-      {% if s.masque_enabled %}<dt>MASQUE</dt><dd>sing-box {{ st.mq_version or '—' }} · служба {{ st.mq_active or '?' }}</dd>{% endif %}
+      {% if s.hy2_enabled %}<dt>Hysteria</dt><dd>{{ st.version or '—' }} · служба {{ eng_badge(st, 'hy') or '?' }} · {{ st.enabled or '?' }}</dd>{% endif %}
+      {% if sb_main %}<dt>sing-box</dt><dd>{{ st.sb_version or '—' }} · служба {{ eng_badge(st, 'sb') or '?' }}</dd>{% endif %}
+      {% if s.masque_enabled %}<dt>MASQUE</dt><dd>sing-box {{ st.mq_version or '—' }} · служба {{ eng_badge(st, 'mq') or '?' }}</dd>{% endif %}
       <dt>Запущена</dt><dd>{{ st.since or '—' }}</dd>
       <dt>Аптайм ОС</dt><dd>{{ st.uptime|dur if st.uptime else '—' }}</dd>
       <dt>Нагрузка</dt><dd>{{ st.load or '—' }}{% if st.cpus %} ({{ st.cpus }} CPU){% endif %}</dd>
@@ -47,6 +47,14 @@
 
   <section class="card">
     <h3>Конфигурация</h3>
+    {% if not s.hy2_enabled %}
+    <dl class="kv">
+      <dt>Клиенты подключаются к</dt><dd class="mono">{{ s.anytls_domain or s.public_host or s.host }}</dd>
+      <dt>Протоколы</dt><dd>{{ proto_badges(s) }}</dd>
+      <dt>TLS</dt><dd>{{ s.anytls_domain or '—' }}{% if s.anytls_insecure %} <span class="badge warn">insecure</span>{% endif %}</dd>
+      <dt>Синхронизирован</dt><dd>{{ s.last_sync|ago if s.last_sync else 'ни разу' }}</dd>
+    </dl>
+    {% else %}
     <dl class="kv">
       <dt>Клиенты подключаются к</dt><dd class="mono">{{ endpoint.host }}:{{ endpoint.hop or endpoint.port }}</dd>
       <dt>SNI</dt><dd>{{ endpoint.sni or '—' }}{% if endpoint.insecure %} <span class="badge warn">insecure</span>{% endif %}</dd>
@@ -59,6 +67,7 @@
       <dt>trafficStats</dt><dd>{{ '127.0.0.1:' ~ info.stats_port if info.stats_port else 'выключен' }}</dd>
       <dt>Синхронизирован</dt><dd>{{ s.last_sync|ago if s.last_sync else 'ни разу' }}</dd>
     </dl>
+    {% endif %}
     {% if s.notes %}<p class="muted small">{{ s.notes }}</p>{% endif %}
   </section>
 </div>
@@ -97,28 +106,46 @@
   <div class="btns">
     <button class="btn" data-api="/api/servers/{{ s.id }}/check" data-reload="500">Проверить</button>
     <button class="btn primary" data-api="/api/servers/{{ s.id }}/sync" data-reload="1500">Синхронизировать профили</button>
-    <button class="btn" data-api="/api/servers/{{ s.id }}/import" data-confirm="Прочитать userpass из config.yaml и создать/привязать эти профили в панели?" data-reload="2500">Импорт профилей с сервера</button>
-    <button class="btn" data-api="/api/servers/{{ s.id }}/service/restart" data-confirm="Перезапустить hysteria? Все клиенты переподключатся.">Перезапустить</button>
-    <button class="btn" data-api="/api/servers/{{ s.id }}/service/start">Старт</button>
-    <button class="btn" data-api="/api/servers/{{ s.id }}/service/stop" data-confirm="Остановить hysteria на {{ s.name }}?">Стоп</button>
-    <button class="btn" data-logs="/api/servers/{{ s.id }}/logs">Журнал Hysteria</button>
-    {% if sb_main %}<button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=sb">Журнал sing-box</button>{% endif %}
-    {% if s.masque_enabled %}<button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=mq">Журнал MASQUE</button>{% endif %}
-    {% if s.hy2_enabled %}
-    <button class="btn" data-config="/api/servers/{{ s.id }}/config" data-save="/api/servers/{{ s.id }}/config" data-title="Hysteria2: {{ s.config_path }}">Конфиг Hysteria (YAML)</button>
-    <button class="btn" data-api="/api/servers/{{ s.id }}/rollback" data-confirm="Восстановить предыдущий config.yaml из последнего бэкапа и перезапустить службу?">Откатить Hysteria</button>
-    {% endif %}
-    {% if sb_main %}
-    <button class="btn" data-config="/api/servers/{{ s.id }}/sbconfig" data-save="/api/servers/{{ s.id }}/sbconfig" data-title="sing-box (VLESS / AnyTLS): {{ s.sb_config_path }}">Конфиг VLESS / AnyTLS (JSON)</button>
-    <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=sb" data-confirm="Восстановить предыдущий конфиг sing-box из последнего бэкапа и перезапустить службу?">Откатить sing-box</button>
-    {% endif %}
-    {% if s.masque_enabled %}<button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=mq" data-confirm="Восстановить предыдущий конфиг MASQUE из последнего бэкапа и перезапустить службу?">Откатить MASQUE</button>{% endif %}
-    <button class="btn" data-api="/api/servers/{{ s.id }}/masq" data-confirm="Заменить сайт-заглушку на сервере страницей входа в роутер? Прежний файл index.html будет перезаписан.">Обновить заглушку</button>
-    {% if s.hy2_enabled %}<button class="btn" data-job="/api/servers/{{ s.id }}/update-core" data-confirm="Обновить Hysteria2 до последней версии (get.hy2.sh) и перезапустить?">Обновить Hysteria</button>{% endif %}
-    {% if sb_main or s.masque_enabled %}<button class="btn" data-job="/api/servers/{{ s.id }}/update-sb" data-confirm="Обновить sing-box до последней стабильной версии{{ ' (и sing-box для MASQUE — до последней 1.15+)' if s.masque_enabled }} и перезапустить? Клиенты переподключатся.">Обновить sing-box</button>{% endif %}
+    <button class="btn" data-api="/api/servers/{{ s.id }}/import" data-confirm="Прочитать пользователей из конфигов Hysteria2 и sing-box и создать/привязать эти профили в панели?" data-reload="2500">Импорт профилей с сервера</button>
+    {% if s.hy2_enabled %}<button class="btn" data-api="/api/servers/{{ s.id }}/masq" data-confirm="Заменить сайт-заглушку на сервере страницей входа в роутер? Прежний файл index.html будет перезаписан.">Обновить заглушку</button>{% endif %}
     {% if s.ssh_auth == 'password' %}<button class="btn" data-api="/api/servers/{{ s.id }}/install-key" data-confirm="Добавить ключ панели в authorized_keys и перейти на вход по ключу?" data-reload="1500">Установить ключ панели</button>{% endif %}
     {% if s.host_key %}<button class="btn ghost" data-api="/api/servers/{{ s.id }}/reset-hostkey" data-confirm="Сбросить сохранённый ключ хоста? Делайте это только если VPS переустановлен." data-reload="800">Сбросить ключ хоста</button>{% endif %}
   </div>
+  {% if s.hy2_enabled %}
+  <h4 class="mt">Hysteria2 {{ eng_badge(st, 'hy') }}</h4>
+  <div class="btns">
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/restart?which=hy" data-confirm="Перезапустить hysteria? Все клиенты переподключатся.">Перезапустить</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/start?which=hy" data-reload="800">Старт</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/stop?which=hy" data-confirm="Остановить hysteria на {{ s.name }}?" data-reload="800">Стоп</button>
+    <button class="btn" data-logs="/api/servers/{{ s.id }}/logs">Журнал Hysteria</button>
+    <button class="btn" data-config="/api/servers/{{ s.id }}/config" data-save="/api/servers/{{ s.id }}/config" data-title="Hysteria2: {{ s.config_path }}">Конфиг Hysteria (YAML)</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/rollback" data-confirm="Восстановить предыдущий config.yaml из последнего бэкапа и перезапустить службу?">Откатить Hysteria</button>
+    <button class="btn" data-job="/api/servers/{{ s.id }}/update-core" data-confirm="Обновить Hysteria2 до последней версии (get.hy2.sh) и перезапустить?">Обновить Hysteria</button>
+  </div>
+  {% endif %}
+  {% if sb_main %}
+  <h4 class="mt">sing-box {{ eng_badge(st, 'sb') }}</h4>
+  <div class="btns">
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/restart?which=sb" data-confirm="Перезапустить sing-box? Все клиенты его протоколов переподключатся.">Перезапустить</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/start?which=sb" data-reload="800">Старт</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/stop?which=sb" data-confirm="Остановить sing-box на {{ s.name }}?" data-reload="800">Стоп</button>
+    <button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=sb">Журнал sing-box</button>
+    <button class="btn" data-config="/api/servers/{{ s.id }}/sbconfig" data-save="/api/servers/{{ s.id }}/sbconfig" data-title="sing-box: {{ s.sb_config_path }}">Конфиг sing-box (JSON)</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=sb" data-confirm="Восстановить предыдущий конфиг sing-box из последнего бэкапа и перезапустить службу?">Откатить sing-box</button>
+    <button class="btn" data-job="/api/servers/{{ s.id }}/update-sb" data-confirm="Обновить sing-box до последней стабильной версии{{ ' (и sing-box для MASQUE — до последней 1.15+)' if s.masque_enabled }} и перезапустить? Клиенты переподключатся.">Обновить sing-box</button>
+  </div>
+  {% endif %}
+  {% if s.masque_enabled %}
+  <h4 class="mt">MASQUE {{ eng_badge(st, 'mq') }}</h4>
+  <div class="btns">
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/restart?which=mq" data-confirm="Перезапустить службу MASQUE? Её клиенты переподключатся.">Перезапустить</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/start?which=mq" data-reload="800">Старт</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/service/stop?which=mq" data-confirm="Остановить службу MASQUE на {{ s.name }}?" data-reload="800">Стоп</button>
+    <button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=mq">Журнал MASQUE</button>
+    <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=mq" data-confirm="Восстановить предыдущий конфиг MASQUE из последнего бэкапа и перезапустить службу?">Откатить MASQUE</button>
+    {% if not sb_main %}<button class="btn" data-job="/api/servers/{{ s.id }}/update-sb" data-confirm="Обновить sing-box для MASQUE до последней 1.15+ и перезапустить? Клиенты переподключатся.">Обновить sing-box</button>{% endif %}
+  </div>
+  {% endif %}
   <pre id="out" class="out" hidden></pre>
   <div id="cfgbox" hidden>
     <p class="small"><b id="cfgtitle"></b></p>
@@ -128,6 +155,25 @@
     <textarea id="cfgtext" class="mono code" rows="24" spellcheck="false"></textarea>
     <div class="btns"><button class="btn primary" id="cfgsave" data-url="">Сохранить и перезапустить</button><button class="btn ghost" id="cfgclose">Закрыть</button></div>
   </div>
+</section>
+
+<section class="card" id="ipv6">
+  <h3>IPv6</h3>
+  <p class="small muted">Если у провайдера IPv6 работает плохо или вы его не используете, его можно отключить: исчезают обходные пути в обход прокси
+    и «зависания» на сайтах, где IPv6 не отвечает. Настройка сохраняется после перезагрузки (файл <code>/etc/sysctl.d/99-solahelm-ipv6.conf</code>).
+    Панель проверяет, что после отключения может войти на сервер заново, иначе откатывает. Если у домена сервера есть AAAA-запись, удалите её:
+    клиенты не смогут подключиться по IPv6.</p>
+  {% if st.ipv6 and st.ipv6.supported %}
+  <dl class="kv">
+    <dt>Состояние</dt><dd>{% if st.ipv6.off %}<span class="badge ok">отключён</span>{% else %}<span class="badge warn">включён</span>{% endif %}{% if st.ipv6.off and not st.ipv6.ours %} <span class="small muted">(отключён не панелью)</span>{% endif %}</dd>
+    {% if not st.ipv6.off %}<dt>Глобальных адресов</dt><dd>{{ st.ipv6.addrs }}</dd>{% endif %}
+  </dl>
+  <div class="btns">
+    {% if st.ipv6.off %}<button class="btn" data-api="/api/servers/{{ s.id }}/ipv6?disable=0" data-confirm="Включить IPv6 на сервере {{ s.name }}? Адрес может вернуться только после перезапуска сети или перезагрузки сервера." data-reload="1500">Включить IPv6</button>
+    {% else %}<button class="btn" data-api="/api/servers/{{ s.id }}/ipv6?disable=1" data-confirm="Отключить IPv6 на сервере {{ s.name }}? Если у домена сервера есть AAAA-запись, удалите её." data-reload="1500">Отключить IPv6</button>{% endif %}
+  </div>
+  {% elif st.ipv6 %}<p class="muted small">В ядре сервера нет поддержки IPv6.</p>
+  {% else %}<p class="muted small">Состояние появится после ближайшего опроса сервера.</p>{% endif %}
 </section>
 
 <section class="card" id="guard">
@@ -241,10 +287,12 @@
         <label>Домен сервера (A-запись на этот VPS)<input name="anytls_domain" value="{{ s.anytls_domain or (info.domains or [''])[0] or s.public_host }}" placeholder="nl.example.com"></label>
         <label>Сертификат
           <select name="anytls_cert">
-            <option value="hysteria" {{ 'selected' if s.anytls_cert != 'selfsigned' }}>Взять у Hysteria2 (Let's Encrypt, обновляется само)</option>
+            {% if s.hy2_enabled %}<option value="hysteria" {{ 'selected' if s.anytls_cert not in ('selfsigned', 'letsencrypt') }}>Взять у Hysteria2 (Let's Encrypt, обновляется само)</option>{% endif %}
+            {% if not s.hy2_enabled %}<option value="letsencrypt" {{ 'selected' if s.anytls_cert != 'selfsigned' }}>Let's Encrypt через certbot (нужен свободный порт 80, обновляется само)</option>{% endif %}
             <option value="selfsigned" {{ 'selected' if s.anytls_cert == 'selfsigned' }}>Самоподписанный (клиенты подключаются с insecure)</option>
           </select>
         </label>
+        {% if not s.hy2_enabled %}<label>E-mail для Let's Encrypt (необязательно)<input name="le_email" type="email" placeholder="me@example.com"></label>{% endif %}
       </div>
       <div class="row">
         <label class="check"><input type="checkbox" name="anytls" {{ 'checked' if s.anytls_enabled }}> AnyTLS (TCP): новый протокол, не все клиенты его знают</label>

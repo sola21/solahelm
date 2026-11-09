@@ -316,7 +316,7 @@ async def dashboard(request: Request, sess: dict = Depends(session_dep)):
     users = db.q("SELECT * FROM users")
     stats = {
         "servers": len(servers),
-        "servers_up": sum(1 for s in servers if s["st"].get("active") == "active" and not s["st"]["down"]),
+        "servers_up": sum(1 for s in servers if s["st"].get("active") in ("active", "partial") and not s["st"]["down"]),
         "users": len(users),
         "users_active": sum(1 for u in users if user_state(u)[0] == "on"),
         "online": sum(s["st"].get("online_total", 0) for s in servers),
@@ -583,9 +583,10 @@ async def api_check(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
 
 
 @r.post("/api/servers/{sid}/service/{op}")
-async def api_service(request: Request, sid: int, op: str, sess: dict = Depends(csrf_dep)):
-    ok, res = await call(hy.service_action, sid, op)
-    audit(request, f"server.{op}", f"id={sid} {'ok' if ok else res[:200]}")
+async def api_service(request: Request, sid: int, op: str, which: str = "hy", sess: dict = Depends(csrf_dep)):
+    which = which if which in ("hy", "sb", "mq") else "hy"
+    ok, res = await call(hy.service_action, sid, op, which)
+    audit(request, f"server.{op}", f"id={sid} {which} {'ok' if ok else res[:200]}")
     return jok(msg=f"Состояние службы: {res}") if ok else jerr(res)
 
 
@@ -728,7 +729,8 @@ async def api_provision_sb(request: Request, sid: int, sess: dict = Depends(csrf
     opts = {"ufw": bool(b.get("ufw")), "assign_all": bool(b.get("assign_all")),
             "reality_sni": str(b.get("reality_sni", "")).strip().lower(),
             "anytls_domain": str(b.get("anytls_domain", "")).strip().lower(),
-            "anytls_cert": "selfsigned" if b.get("anytls_cert") == "selfsigned" else "hysteria"}
+            "anytls_cert": b.get("anytls_cert") if b.get("anytls_cert") in ("hysteria", "letsencrypt", "selfsigned") else "hysteria",
+            "le_email": str(b.get("le_email", "")).strip()}
     for p in sb.PROTOCOLS + ("masque",):
         opts[p] = bool(b.get(p))
         opts[p + "_port"] = _int(b.get(p + "_port", sb.DEFAULT_PORTS[p]), 1, 65535, 0)
@@ -745,6 +747,16 @@ async def api_provision_sb(request: Request, sid: int, sess: dict = Depends(csrf
     ports = [opts[p + "_port"] for p in chosen]
     if len(set(ports)) != len(ports):
         return jerr("Порты протоколов должны различаться")
+    tls_chosen = any(opts[p] for p in sb.TLS_PROTOS) or opts["masque"]
+    if tls_chosen and opts["anytls_cert"] == "hysteria" and not s["hy2_enabled"]:
+        return jerr("Сертификат Hysteria недоступен: на сервере нет Hysteria2. Выберите Let's Encrypt или самоподписанный")
+    if tls_chosen and opts["anytls_cert"] == "letsencrypt":
+        if s["hy2_enabled"]:
+            return jerr("Let's Encrypt через certbot нужен серверу без Hysteria2 (она занимает порт 80). Здесь выберите сертификат Hysteria")
+        if opts["le_email"] and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", opts["le_email"]):
+            return jerr("Некорректный e-mail для Let's Encrypt")
+        if 80 in ports:
+            return jerr("Порт 80 нужен certbot для выпуска сертификата — выберите другой порт протокола")
     if s["hy2_enabled"]:
         # Hysteria2 по инструкции занимает TCP 443 (заглушка HTTPS), UDP 443 (сама Hysteria) и TCP 80 (ACME)
         for p in chosen:
@@ -828,6 +840,15 @@ async def api_guard_password(request: Request, sid: int, sess: dict = Depends(cs
     msg = (f"Вход по паролю {'разрешён' if allow else 'запрещён'}. "
            f"PasswordAuthentication: {res['password_auth']}, PermitRootLogin: {res['root_login']}.")
     return jok(msg=msg)
+
+
+@r.post("/api/servers/{sid}/ipv6")
+async def api_ipv6(request: Request, sid: int, disable: int = 1, sess: dict = Depends(csrf_dep)):
+    ok, res = await call(guard.set_ipv6, sid, bool(disable))
+    audit(request, "server.ipv6", f"id={sid} disable={bool(disable)} {'ok' if ok else res[:200]}")
+    if not ok:
+        return jerr(res)
+    return jok(msg="IPv6 отключён" if res["disabled"] else "IPv6 включён (адрес может вернуться после перезапуска сети или перезагрузки сервера)")
 
 
 @r.post("/api/poll-all")

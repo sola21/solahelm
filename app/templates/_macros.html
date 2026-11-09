@@ -1,8 +1,14 @@
+{# состояние служб сервера: по бейджу на каждую (Hysteria2 / sing-box / MASQUE), независимо друг от друга #}
 {% macro svc_badge(st) -%}
 {% if st.down %}<span class="badge err" title="{{ st.error }}">нет связи</span>
+{% elif st.svcs %}{% for x in st.svcs %}<span class="badge {{ 'ok' if x.active == 'active' else 'err' }}" title="{{ x.name }}{% if x.version %} {{ x.version }}{% endif %}: {{ x.active or '?' }}">{{ x.name }}{% if x.active != 'active' %}: {{ 'остановлена' if x.active in ('inactive', '') else x.active }}{% endif %}</span> {% endfor %}
 {% elif st.active == 'active' %}<span class="badge ok">работает</span>
 {% elif st.active %}<span class="badge err">{{ st.active }}</span>
 {% else %}<span class="badge">не проверен</span>{% endif %}
+{%- endmacro %}
+
+{% macro eng_badge(st, key) -%}
+{% for x in (st.svcs or []) if x.key == key %}<span class="badge {{ 'ok' if x.active == 'active' else 'err' }}">{{ 'работает' if x.active == 'active' else ('остановлена' if x.active in ('inactive', '') else x.active) }}</span>{% endfor %}
 {%- endmacro %}
 
 {# полоса доступности: по клетке на интервал времени #}

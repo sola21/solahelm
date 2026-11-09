@@ -228,6 +228,20 @@ def sync(c: Conn, s: dict, rows: list[dict]) -> bool:
     return True
 
 
+def users_from_config(cfg: dict) -> dict:
+    """Пользователи с паролем из inbound'ов sing-box (AnyTLS, Trojan, Naive, TUIC): {имя: пароль}. Служебный пользователь пропускается."""
+    out = {}
+    for i in cfg.get("inbounds", []):
+        if i.get("type") not in ("anytls", "trojan", "naive", "tuic"):
+            continue
+        for u in i.get("users", []):
+            name = u.get("name") or u.get("username")
+            pw = u.get("password")
+            if name and pw and name != PLACEHOLDER_USER:
+                out.setdefault(name, pw)
+    return out
+
+
 def read_config(sid: int) -> str:
     s = hy.get_server(sid)
     with Conn(s) as c:
@@ -368,7 +382,8 @@ def masque_version_ok(v: str) -> bool:
 # ---------------- установка ----------------
 CERTSYNC = r"""#!/bin/bash
 # Кладёт сертификат домена для TLS-протоколов (AnyTLS, Trojan, TUIC) в /etc/sing-box/certs и перечитывает sing-box при изменении.
-# Использование: hy2panel-certsync <домен> <hysteria|selfsigned>
+# Использование: hy2panel-certsync <домен> <hysteria|letsencrypt|selfsigned>
+# hysteria — взять сертификат у Hysteria2 (ACME), letsencrypt — у certbot (нужен для сервера без Hysteria2)
 set -e
 DOMAIN="$1"; MODE="$2"
 DIR=__CERT_DIR__; CRT=$DIR/anytls.crt; KEY=$DIR/anytls.key
@@ -378,6 +393,13 @@ if [ "$MODE" = hysteria ]; then
   K=$(find /var/lib/hysteria /etc/hysteria -type f -name "$DOMAIN.key" 2>/dev/null | head -n1)
   if [ -z "$C" ] || [ -z "$K" ]; then
     echo "Сертификат Hysteria для домена TLS-протоколов не найден (нужен работающий ACME на этом сервере)" >&2; exit 2
+  fi
+  cmp -s "$C" "$CRT" || { cp "$C" "$CRT"; changed=1; }
+  cmp -s "$K" "$KEY" || { cp "$K" "$KEY"; changed=1; }
+elif [ "$MODE" = letsencrypt ]; then
+  C=/etc/letsencrypt/live/$DOMAIN/fullchain.pem; K=/etc/letsencrypt/live/$DOMAIN/privkey.pem
+  if [ ! -s "$C" ] || [ ! -s "$K" ]; then
+    echo "Сертификат certbot для домена TLS-протоколов не найден (/etc/letsencrypt/live/$DOMAIN)" >&2; exit 2
   fi
   cmp -s "$C" "$CRT" || { cp "$C" "$CRT"; changed=1; }
   cmp -s "$K" "$KEY" || { cp "$K" "$KEY"; changed=1; }
@@ -430,8 +452,20 @@ def build_install_script(s: dict, cfg_text: str | None, opts: dict, mq_text: str
     if tls_on:
         cs = CERTSYNC.replace("__CERT_DIR__", CERT_DIR).replace("__SVC__", svc).replace("__MQSVC__", MASQUE_SVC)
         dom, mode = shlex.quote(s["anytls_domain"]), shlex.quote(s["anytls_cert"])
-        L += [sh_echo("== [4/7] Сертификат для TLS-протоколов"),
-              "cat > /usr/local/sbin/hy2panel-certsync <<'HY2PANEL_CERT'", cs.rstrip("\n"), "HY2PANEL_CERT",
+        L.append(sh_echo("== [4/7] Сертификат для TLS-протоколов"))
+        if s["anytls_cert"] == "letsencrypt":
+            # свой сертификат без Hysteria2: certbot в режиме standalone (нужен свободный TCP 80), продление делает certbot.timer
+            mail = (opts.get("le_email") or "").strip()
+            L += ["apt-get install -y certbot", *(["ufw allow 80/tcp"] if opts["ufw"] else []),
+                  f"if [ ! -s /etc/letsencrypt/live/{s['anytls_domain']}/fullchain.pem ]; then",
+                  f"  certbot certonly --standalone --non-interactive --agree-tos -d {dom} "
+                  + (f"-m {shlex.quote(mail)}" if mail else "--register-unsafely-without-email"),
+                  "fi",
+                  "mkdir -p /etc/letsencrypt/renewal-hooks/deploy",
+                  "printf '#!/bin/sh\n/usr/local/sbin/hy2panel-certsync " + s["anytls_domain"] + " letsencrypt\n' "
+                  "> /etc/letsencrypt/renewal-hooks/deploy/hy2panel-certsync",
+                  "chmod 755 /etc/letsencrypt/renewal-hooks/deploy/hy2panel-certsync"]
+        L += ["cat > /usr/local/sbin/hy2panel-certsync <<'HY2PANEL_CERT'", cs.rstrip("\n"), "HY2PANEL_CERT",
               "chmod 755 /usr/local/sbin/hy2panel-certsync",
               f"/usr/local/sbin/hy2panel-certsync {dom} {mode}",
               "cat > /etc/systemd/system/hy2panel-certsync.service <<'HY2PANEL_UNIT'",
