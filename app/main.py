@@ -1482,6 +1482,7 @@ async def client_edit(request: Request, cid: int, sess: dict = Depends(csrf_dep)
     db.ex(f"UPDATE clients SET {','.join(k + '=?' for k in d)} WHERE id=?", (*d.values(), cid))
     if "pw_hash" in d or not d["enabled"]:
         db.ex("DELETE FROM client_sessions WHERE client_id=?", (cid,))
+        db.ex("DELETE FROM app_tokens WHERE client_id=?", (cid,))
     _set_client_profiles(cid, uids)
     audit(request, "client.edit", f"{d['login']} профили: {uids}{' пароль изменён' if 'pw_hash' in d else ''}")
     return redirect(f"/clients/{cid}", ok="Сохранено")
@@ -1499,8 +1500,9 @@ async def client_delete(request: Request, cid: int, sess: dict = Depends(csrf_de
 @r.post("/clients/{cid}/logout-all")
 async def client_logout_all(request: Request, cid: int, sess: dict = Depends(csrf_dep)):
     db.ex("DELETE FROM client_sessions WHERE client_id=?", (cid,))
+    db.ex("DELETE FROM app_tokens WHERE client_id=?", (cid,))
     audit(request, "client.logout_all", str(cid))
-    return redirect(f"/clients/{cid}", ok="Все сессии клиента завершены")
+    return redirect(f"/clients/{cid}", ok="Все сессии и приложения клиента отключены")
 
 
 # ---------------- личный кабинет клиента (BASE/) ----------------
@@ -1613,7 +1615,7 @@ async def my_home(request: Request, cs: dict = Depends(client_dep)):
             u["sub_url"] = f"{pb}/sub/{u['sub_token']}"
             u["sub_qr"] = clients.qr_svg(u["sub_url"])
             u["has_masque"] = clients.has_masque(u["conns"])
-    return render_portal(request, "my.html", cs, profiles=profiles)
+    return render_portal(request, "my.html", cs, profiles=profiles, apps=security.app_tokens_of(cs["client_id"]))
 
 
 @pr.get("/qr/{uid}/{sid}.png")
@@ -1666,8 +1668,101 @@ async def my_password(request: Request, cs: dict = Depends(client_csrf_dep)):
                                 status_code=303)
     db.ex("UPDATE clients SET pw_hash=? WHERE id=?", (await run_in_threadpool(security.hash_password, new), c["id"]))
     db.ex("DELETE FROM client_sessions WHERE client_id=? AND token_hash<>?", (c["id"], cs["token_hash"]))
+    db.ex("DELETE FROM app_tokens WHERE client_id=?", (c["id"],))   # приложения войдут заново с новым паролем
     db.audit("client.password", c["login"], client_ip(request))
     return RedirectResponse(BASE + "/?ok=" + quote(tr("Пароль изменён")), status_code=303)
+
+
+@pr.post("/apps/{tid}/revoke")
+async def my_app_revoke(request: Request, tid: int, cs: dict = Depends(client_csrf_dep)):
+    t = db.q1("SELECT device FROM app_tokens WHERE id=? AND client_id=?", (tid, cs["client_id"]))
+    if t:
+        db.ex("DELETE FROM app_tokens WHERE id=?", (tid,))
+        db.audit("client.app.revoke", f"{cs['login']} {t['device']}", client_ip(request))
+    return RedirectResponse(BASE + "/?ok=" + quote(tr("Приложение отключено")), status_code=303)
+
+
+# ---------------- API для приложений (SolaHelm Client): BASE/api/app/... ----------------
+# Вход логином и паролем от кабинета -> токен приложения (Authorization: Bearer), по нему список профилей
+# со ссылками подписки. Ошибки — кодами (bad_request, bad_credentials, rate_limited, unauthorized):
+# приложение показывает их на своём языке.
+class AppAuthRequired(Exception):
+    pass
+
+
+@app.exception_handler(AppAuthRequired)
+async def _app_auth_required(request: Request, exc):
+    return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+
+def _bearer(request: Request) -> str:
+    h = request.headers.get("authorization", "")
+    return h[7:].strip() if h[:7].lower() == "bearer " else ""
+
+
+def app_dep(request: Request) -> dict:
+    t = security.get_app_token(_bearer(request), client_ip(request))
+    if not t:
+        raise AppAuthRequired()
+    return t
+
+
+def _app_payload(request: Request, client_id: int) -> dict:
+    c = db.q1("SELECT login, name FROM clients WHERE id=?", (client_id,))
+    pb = public_base(request)
+    out = []
+    for u in db.q("SELECT * FROM users WHERE client_id=? ORDER BY username", (client_id,)):
+        state = user_state(u)
+        p = {
+            "id": u["id"], "name": u["username"], "state": state[0],
+            "expires_at": u["expires_at"] or 0,
+            "traffic_used": (u["tx"] or 0) + (u["rx"] or 0), "traffic_limit": u["traffic_limit"] or 0,
+            "servers": len(_profile_servers(u["id"])),
+            "subscription": None,
+        }
+        if state[0] == "on" and u["sub_token"]:
+            url = f"{pb}/sub/{u['sub_token']}"
+            p["subscription"] = {"universal": url, "clash": url + "/clash", "singbox": url + "/singbox"}
+        out.append(p)
+    return {"ok": True, "panel": {"name": BRAND, "version": VERSION},
+            "client": {"login": c["login"], "name": c["name"] or ""}, "profiles": out}
+
+
+@pr.post("/api/app/login")
+async def app_login(request: Request):
+    ip = client_ip(request)
+    key = "client:" + ip   # общий счётчик неудачных попыток с веб-кабинетом
+    try:
+        body = await request.json()
+        login, password = str(body.get("login") or "")[:64], str(body.get("password") or "")[:256]
+        device = str(body.get("device") or "")[:100]
+    except Exception:
+        return JSONResponse({"ok": False, "error": "bad_request"}, status_code=400)
+    if not login or not password:
+        return JSONResponse({"ok": False, "error": "bad_request"}, status_code=400)
+    if not security.limiter.allowed(key):
+        return JSONResponse({"ok": False, "error": "rate_limited"}, status_code=429)
+    c = await run_in_threadpool(security.authenticate_client, login, password)
+    if not c:
+        security.limiter.fail(key)
+        db.audit("client.app.login.fail", login, ip)
+        return JSONResponse({"ok": False, "error": "bad_credentials"}, status_code=401)
+    security.limiter.reset(key)
+    token = security.create_app_token(c["id"], device or request.headers.get("user-agent", "")[:100], ip)
+    db.audit("client.app.login.ok", f"{c['login']} {device}", ip)
+    return {**_app_payload(request, c["id"]), "token": token}
+
+
+@pr.get("/api/app/profiles")
+async def app_profiles(request: Request, t: dict = Depends(app_dep)):
+    return _app_payload(request, t["client_id"])
+
+
+@pr.post("/api/app/logout")
+async def app_logout(request: Request, t: dict = Depends(app_dep)):
+    security.delete_app_token(_bearer(request))
+    db.audit("client.app.logout", f"{t['login']} {t['device']}", client_ip(request))
+    return {"ok": True}
 
 
 app.include_router(r)

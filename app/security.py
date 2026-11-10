@@ -115,6 +115,49 @@ def delete_client_session(token: str | None) -> None:
         db.ex("DELETE FROM client_sessions WHERE token_hash=?", (_th(token),))
 
 
+# ---------- токены приложений (вход из SolaHelm Client и др.) ----------
+# Приложение входит один раз логином и паролем и получает токен; пароль не хранит. Токен не истекает сам,
+# но отзывается: из кабинета («Подключённые приложения»), выходом в приложении, сменой пароля, отключением клиента.
+APP_TOKEN_PREFIX = "sht_"
+MAX_APP_TOKENS = 20   # на одного клиента; самые старые удаляются
+
+
+def create_app_token(client_id: int, device: str, ip: str) -> str:
+    token = APP_TOKEN_PREFIX + secrets.token_urlsafe(32)
+    now = int(time.time())
+    db.ex("INSERT INTO app_tokens(token_hash,client_id,device,created,last_used,last_ip) VALUES(?,?,?,?,?,?)",
+          (_th(token), client_id, device.strip()[:100], now, now, ip))
+    db.ex("DELETE FROM app_tokens WHERE client_id=? AND id NOT IN "
+          "(SELECT id FROM app_tokens WHERE client_id=? ORDER BY last_used DESC, id DESC LIMIT ?)",
+          (client_id, client_id, MAX_APP_TOKENS))
+    db.ex("UPDATE clients SET last_login=? WHERE id=?", (now, client_id))
+    return token
+
+
+def get_app_token(token: str | None, ip: str = "") -> dict | None:
+    """Токен приложения -> {id, client_id, login, name, device}; None, если токен неизвестен или клиент отключён."""
+    if not token or len(token) > 200 or not token.startswith(APP_TOKEN_PREFIX):
+        return None
+    t = db.q1("SELECT t.id, t.client_id, t.device, t.last_used, c.login, c.name, c.enabled FROM app_tokens t "
+              "JOIN clients c ON c.id=t.client_id WHERE t.token_hash=?", (_th(token),))
+    if not t or not t["enabled"]:
+        return None
+    now = int(time.time())
+    if now - (t["last_used"] or 0) > 60:   # не писать в базу на каждый запрос
+        db.ex("UPDATE app_tokens SET last_used=?, last_ip=? WHERE id=?", (now, ip, t["id"]))
+    return t
+
+
+def delete_app_token(token: str | None) -> None:
+    if token:
+        db.ex("DELETE FROM app_tokens WHERE token_hash=?", (_th(token),))
+
+
+def app_tokens_of(client_id: int) -> list[dict]:
+    return db.q("SELECT id, device, created, last_used, last_ip FROM app_tokens WHERE client_id=? "
+                "ORDER BY last_used DESC, id DESC", (client_id,))
+
+
 # ---------- шифрование секретов (пароли SSH, ключи) ----------
 _KEY_FILE = DATA_DIR / "secret.key"
 _fernet: Fernet | None = None

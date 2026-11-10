@@ -130,6 +130,16 @@ CREATE TABLE IF NOT EXISTS client_sessions(
     ip TEXT, ua TEXT,
     created INTEGER, expires INTEGER
 );
+-- приложения клиента (SolaHelm Client и др.): долгоживущий токен вместо пароля; хранится только хэш
+CREATE TABLE IF NOT EXISTS app_tokens(
+    id INTEGER PRIMARY KEY,
+    token_hash TEXT UNIQUE NOT NULL,
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    device TEXT DEFAULT '',
+    created INTEGER,
+    last_used INTEGER DEFAULT 0,
+    last_ip TEXT DEFAULT ''
+);
 """
 
 

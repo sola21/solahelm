@@ -860,4 +860,13 @@ EN: dict[str, str] = {
     "Состояние появится после ближайшего опроса сервера.": "The state will appear after the next server poll.",
     "включён": "enabled",
     "отключён": "disabled",
+    "Подключённые приложения": "Connected apps",
+    "Приложения, в которые вы вошли логином и паролем от кабинета (например, SolaHelm Client): они сами подтягивают профили и подписки. Если устройство потеряно или больше не нужно — отключите его. Смена пароля отключает все приложения.": "Apps you signed in to with your account login and password (for example, SolaHelm Client): they fetch your profiles and subscriptions themselves. If a device is lost or no longer needed, disconnect it. Changing the password disconnects all apps.",
+    "Устройство": "Device",
+    "Последняя активность": "Last activity",
+    "Отключить приложение": "Disconnect app",
+    "? Чтобы снова им пользоваться, войдите в нём заново.": "? To use it again, sign in to it again.",
+    "Нет подключённых приложений.": "No connected apps.",
+    "Приложение отключено": "App disconnected",
+    "Все сессии и приложения клиента отключены": "All sessions and apps of the client are signed out",
 }

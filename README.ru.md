@@ -34,6 +34,8 @@
 - **Шаблоны маршрутизации** для Clash/mihomo (DNS, TUN, наборы правил, правила). Загрузите любой готовый конфиг mihomo:
   панель сохранит маршрутизацию и подставит ваши серверы. Два готовых шаблона в комплекте.
 - **Кабинет клиента:** отдельные учётные записи (логин + пароль), клиент видит только назначенные ему профили.
+  Приложения вроде [SolaHelm Client](https://github.com/sola21/solahelm-client) могут войти тем же логином и сами
+  получить профили (см. «API для приложений»).
 - **Мониторинг:** онлайн и трафик по профилям / серверам / дням (Hysteria2), история доступности с графиками,
   устойчивое определение «нет связи» (повторы + N неудач подряд).
 - **Незаметность:** случайные префиксы адресов при установке, любой неизвестный путь отвечает обычной 404 в стиле nginx,
@@ -181,11 +183,30 @@ Hysteria2 занимает UDP 443 и TCP 443/80 (заглушка и ACME), п�
 - Если ваш reverse-proxy скрывает реальный IP клиента (NAT / port-proxy), ограничение попыток входа видит один общий адрес.
 - Нашли уязвимость? См. [SECURITY.md](SECURITY.md).
 
+## API для приложений (SolaHelm Client)
+
+Приложение может войти логином и паролем от личного кабинета и само получить профили клиента — так делает
+[SolaHelm Client](https://github.com/sola21/solahelm-client) («Войти в панель»). Пароль приложение не хранит: оно
+получает токен, который клиент может отозвать в кабинете («Подключённые приложения»); смена пароля, отключение
+клиента или «Завершить все сессии» в админке отзывают все токены.
+
+```
+POST <префикс>/api/app/login    {"login", "password", "device"}  -> {"ok", "token", "client", "panel", "profiles"}
+GET  <префикс>/api/app/profiles  Authorization: Bearer <токен>   -> {"ok", "client", "panel", "profiles"}
+POST <префикс>/api/app/logout    Authorization: Bearer <токен>   -> {"ok"}
+```
+
+Профиль — `{"id", "name", "state" (on / off / expired / limit), "expires_at", "traffic_used", "traffic_limit",
+"servers", "subscription"}`; `subscription` (ссылки `universal`, `clash`, `singbox`) равен `null`, если профиль не активен.
+Ошибки — кодами: `bad_request`, `bad_credentials`, `rate_limited` (общий счётчик попыток с кабинетом), `unauthorized`.
+В базе хранится только хэш токена; не больше 20 токенов на клиента.
+
 ## Разработка
 
 ```bash
 python -m venv .venv && . .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+pip install pytest httpx && pytest                   # тесты (tests/)
 cp .env.example .env                                 # по умолчанию: /hy и /hy/admin
 python manage.py create-admin admin
 python run.py                                        # http://127.0.0.1:8088/hy/admin/

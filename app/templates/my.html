@@ -59,6 +59,29 @@
 {% endfor %}
 
 <details class="card">
+  <summary><b>Подключённые приложения</b>{% if apps %} <span class="small muted">· {{ apps|length }}</span>{% endif %}</summary>
+  <p class="small muted mt">Приложения, в которые вы вошли логином и паролем от кабинета (например, SolaHelm Client): они сами подтягивают профили и подписки. Если устройство потеряно или больше не нужно — отключите его. Смена пароля отключает все приложения.</p>
+  {% if apps %}
+  <table class="tbl">
+    <thead><tr><th>Устройство</th><th>Вход</th><th>Последняя активность</th><th>IP</th><th></th></tr></thead>
+    <tbody>
+    {% for a in apps %}
+      <tr>
+        <td>{{ a.device or '—' }}</td>
+        <td class="nowrap">{{ a.created|ts }}</td>
+        <td class="nowrap">{{ a.last_used|ago }}</td>
+        <td class="mono">{{ a.last_ip or '—' }}</td>
+        <td class="r"><form method="post" action="{{ pub }}/apps/{{ a.id }}/revoke" style="display:inline" data-confirm="Отключить приложение {{ a.device }}? Чтобы снова им пользоваться, войдите в нём заново."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">Отключить</button></form></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Нет подключённых приложений.</p>
+  {% endif %}
+</details>
+
+<details class="card">
   <summary><b>Сменить пароль от кабинета</b></summary>
   <form method="post" action="{{ pub }}/password" class="form mt">
     <input type="hidden" name="csrf" value="{{ csrf }}">

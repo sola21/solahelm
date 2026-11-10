@@ -34,6 +34,8 @@ Bilingual interface (**English / Русский**) with a language switch on eve
 - **Routing templates** for Clash/mihomo (DNS, TUN, rule providers, rules). Upload any ready-made mihomo config;
   the panel keeps routing and injects your servers. Two presets included.
 - **Client cabinet:** separate accounts (login + password); a client sees only the profiles assigned to them.
+  Apps such as [SolaHelm Client](https://github.com/sola21/solahelm-client) can sign in with the same login and fetch
+  the profiles themselves (see "App API").
 - **Monitoring:** online users and traffic per profile / server / day (Hysteria2), availability history with charts,
   tolerant "no connection" detection (retries + N failures in a row).
 - **Low profile:** random URL prefixes generated at install, every unknown path answers with a plain nginx-style 404,
@@ -182,11 +184,30 @@ See [`.env.example`](.env.example). The most important keys:
 - If your reverse proxy hides the real client IP (e.g. NAT / port-proxy), login throttling sees one shared address.
 - Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
+## App API (SolaHelm Client)
+
+Apps can sign in with the client cabinet's login and password and fetch the client's profiles themselves —
+[SolaHelm Client](https://github.com/sola21/solahelm-client) does this ("Sign in to a panel"). The app never keeps
+the password: it gets a token that the client can revoke in the cabinet ("Connected apps"); changing the password,
+disabling the client or "Sign out everywhere" in the admin area revokes all of them.
+
+```
+POST <prefix>/api/app/login    {"login", "password", "device"}  -> {"ok", "token", "client", "panel", "profiles"}
+GET  <prefix>/api/app/profiles  Authorization: Bearer <token>  -> {"ok", "client", "panel", "profiles"}
+POST <prefix>/api/app/logout    Authorization: Bearer <token>  -> {"ok"}
+```
+
+A profile is `{"id", "name", "state" (on / off / expired / limit), "expires_at", "traffic_used", "traffic_limit",
+"servers", "subscription"}`; `subscription` (`universal`, `clash`, `singbox` URLs) is `null` unless the profile is active.
+Errors come as codes: `bad_request`, `bad_credentials`, `rate_limited` (shares the cabinet's login throttling),
+`unauthorized`. Only the token's hash is stored; at most 20 tokens per client.
+
 ## Development
 
 ```bash
 python -m venv .venv && . .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+pip install pytest httpx && pytest                   # tests (tests/)
 cp .env.example .env                                 # defaults: /hy and /hy/admin
 python manage.py create-admin admin
 python run.py                                        # http://127.0.0.1:8088/hy/admin/
