@@ -797,6 +797,22 @@ async def api_update_core(request: Request, sid: int, sess: dict = Depends(csrf_
     return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
 
 
+@r.post("/api/servers/{sid}/remove-service")
+async def api_remove_service(request: Request, sid: int, which: str = "hy", sess: dict = Depends(csrf_dep)):
+    if which not in ("hy", "sb", "mq"):
+        return jerr("Неизвестная служба")
+    s = db.q1("SELECT * FROM servers WHERE id=?", (sid,))
+    if not s:
+        return jerr("Сервер не найден", 404)
+    try:
+        hy.service_name(s, which)
+    except hy.HyError as e:
+        return jerr(str(e))
+    audit(request, "server.remove_service", f"id={sid} {which}")
+    jid = worker.run_job("remove", sid, lambda log: hy.remove_service(sid, which, log))
+    return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
+
+
 # ---------------- защита SSH (fail2ban, вход по паролю) ----------------
 @r.post("/api/servers/{sid}/guard")
 async def api_guard_status(request: Request, sid: int, sess: dict = Depends(csrf_dep)):

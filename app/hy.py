@@ -778,6 +778,72 @@ def update_core(sid: int, log) -> None:
     poll_server(sid)
 
 
+# ---------------- удаление службы с сервера ----------------
+SB_FLAGS = ("vless", "vgrpc", "anytls", "trojan", "tuic", "ss", "naive")
+
+
+def build_remove_script(s: dict, which: str) -> str:
+    """Скрипт удаления службы: остановить, убрать из автозапуска и с диска. Конфиги не стираются, а переименовываются (или остаются)."""
+    from . import sb
+    q = shlex.quote
+    L = ["set -e"]
+    if which == "hy":
+        svc = q(s["service"])
+        L += [sh_echo("== Остановка Hysteria2"), f"systemctl disable --now {svc} 2>/dev/null || true",
+              sh_echo("== Снятие port hopping (если был включён)"), HOP_REMOVE.replace("set -e\n", "", 1),
+              sh_echo("== Удаление программы (get.hy2.sh --remove)"), HY_INSTALL + " --remove || true",
+              sh_echo("Конфиг и сертификаты остались в /etc/hysteria и /var/lib/hysteria — удалите их вручную, если они не нужны")]
+    elif which == "sb":
+        svc = q(s["sb_service"])
+        cfg_dir = shlex.quote(s["sb_config_path"].rsplit("/", 1)[0])
+        L += [sh_echo("== Остановка sing-box"), f"systemctl disable --now {svc} 2>/dev/null || true",
+              sh_echo("== Удаление пакета sing-box"),
+              "if command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get remove -y sing-box || true; fi",
+              f"if [ -d {cfg_dir} ]; then mv {cfg_dir} {cfg_dir}.removed-$(date +%Y%m%d-%H%M%S); fi"]
+        if not s.get("masque_enabled"):
+            L += [sh_echo("== Удаление синхронизации сертификата"),
+                  "systemctl disable --now hy2panel-certsync.timer 2>/dev/null || true",
+                  "rm -f /etc/systemd/system/hy2panel-certsync.service /etc/systemd/system/hy2panel-certsync.timer "
+                  "/usr/local/sbin/hy2panel-certsync"]
+        L += ["systemctl daemon-reload", sh_echo("Прежний конфиг сохранён рядом с суффиксом .removed-… — удалите его вручную, если он не нужен")]
+    else:
+        svc = q(sb.MASQUE_SVC)
+        cfg_dir = q(sb.MASQUE_CFG.rsplit("/", 1)[0])
+        L += [sh_echo("== Остановка службы MASQUE"), f"systemctl disable --now {svc} 2>/dev/null || true",
+              f"rm -f /etc/systemd/system/{sb.MASQUE_SVC} {q(sb.MASQUE_BIN)}",
+              f"if [ -d {cfg_dir} ]; then mv {cfg_dir} {cfg_dir}.removed-$(date +%Y%m%d-%H%M%S); fi",
+              "systemctl daemon-reload"]
+    L.append(sh_echo("== Готово: служба удалена"))
+    return "\n".join(L) + "\n"
+
+
+def remove_service(sid: int, which: str, log) -> None:
+    """Удалить службу (hy — Hysteria2, sb — sing-box, mq — MASQUE) с сервера и убрать её протоколы из подписок и ссылок профилей."""
+    from . import sb
+    with server_lock(sid):
+        s = get_server(sid)
+        service_name(s, which)          # проверка: служба на этом сервере включена
+        warn = ""
+        if which == "hy" and s["anytls_cert"] == "hysteria" and (any(s.get(f"{p}_enabled") for p in sb.TLS_PROTOS) or s.get("masque_enabled")):
+            warn = ("ВНИМАНИЕ: TLS-протоколы берут сертификат у Hysteria2. Он перестанет продлеваться; "
+                    "примените блок sing-box с сертификатом Let's Encrypt, пока он не истёк.\n")
+        log(f"Подключение к {s['host']}:{s['ssh_port']} как {s['ssh_user']}…\n")
+        with Conn(s, timeout=20) as c:
+            code = c.run_stream(RUN_SCRIPT, build_remove_script(s, which), log, timeout=600)
+        if code != 0:
+            raise HyError(f"Удаление завершилось с кодом {code}")
+        if which == "hy":
+            db.ex("UPDATE servers SET hy2_enabled=0, hop_applied='', dirty=0 WHERE id=?", (sid,))
+        elif which == "sb":
+            db.ex(f"UPDATE servers SET {','.join(p + '_enabled=0' for p in SB_FLAGS)}, dirty=0 WHERE id=?", (sid,))
+        else:
+            db.ex("UPDATE servers SET masque_enabled=0, dirty=0 WHERE id=?", (sid,))
+        if warn:
+            log("\n" + warn)
+        log("Служба убрана из панели: её ссылки исчезли из профилей и подписок.\n")
+    poll_server(sid)
+
+
 # ---------------- port hopping (Hysteria2) ----------------
 # Клиент Hysteria2 сам перескакивает между UDP-портами из диапазона (hop_ports в настройках сервера).
 # На сервере для этого все порты диапазона перенаправляются на порт Hysteria правилом iptables (nat REDIRECT).

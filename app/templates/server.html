@@ -121,6 +121,7 @@
     <button class="btn" data-config="/api/servers/{{ s.id }}/config" data-save="/api/servers/{{ s.id }}/config" data-title="Hysteria2: {{ s.config_path }}">Конфиг Hysteria (YAML)</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/rollback" data-confirm="Восстановить предыдущий config.yaml из последнего бэкапа и перезапустить службу?">Откатить Hysteria</button>
     <button class="btn" data-job="/api/servers/{{ s.id }}/update-core" data-confirm="Обновить Hysteria2 до последней версии (get.hy2.sh) и перезапустить?">Обновить Hysteria</button>
+    <button class="btn danger" data-job="/api/servers/{{ s.id }}/remove-service?which=hy" data-confirm="Удалить Hysteria2 с сервера {{ s.name }}? Служба будет остановлена и удалена, Hysteria2 исчезнет из подписок и ссылок профилей. Конфиг останется на диске.">Удалить Hysteria2</button>
   </div>
   {% endif %}
   {% if sb_main %}
@@ -133,6 +134,7 @@
     <button class="btn" data-config="/api/servers/{{ s.id }}/sbconfig" data-save="/api/servers/{{ s.id }}/sbconfig" data-title="sing-box: {{ s.sb_config_path }}">Конфиг sing-box (JSON)</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=sb" data-confirm="Восстановить предыдущий конфиг sing-box из последнего бэкапа и перезапустить службу?">Откатить sing-box</button>
     <button class="btn" data-job="/api/servers/{{ s.id }}/update-sb" data-confirm="Обновить sing-box до последней стабильной версии{{ ' (и sing-box для MASQUE — до последней 1.15+)' if s.masque_enabled }} и перезапустить? Клиенты переподключатся.">Обновить sing-box</button>
+    <button class="btn danger" data-job="/api/servers/{{ s.id }}/remove-service?which=sb" data-confirm="Удалить sing-box с сервера {{ s.name }}? Все его протоколы (VLESS, AnyTLS, Trojan, TUIC, Shadowsocks, Naive) будут остановлены и удалены, а из подписок и ссылок профилей исчезнут. Конфиг сохранится рядом с суффиксом .removed.">Удалить sing-box</button>
   </div>
   {% endif %}
   {% if s.masque_enabled %}
@@ -144,6 +146,7 @@
     <button class="btn" data-logs="/api/servers/{{ s.id }}/logs?which=mq">Журнал MASQUE</button>
     <button class="btn" data-api="/api/servers/{{ s.id }}/rollback?which=mq" data-confirm="Восстановить предыдущий конфиг MASQUE из последнего бэкапа и перезапустить службу?">Откатить MASQUE</button>
     {% if not sb_main %}<button class="btn" data-job="/api/servers/{{ s.id }}/update-sb" data-confirm="Обновить sing-box для MASQUE до последней 1.15+ и перезапустить? Клиенты переподключатся.">Обновить sing-box</button>{% endif %}
+    <button class="btn danger" data-job="/api/servers/{{ s.id }}/remove-service?which=mq" data-confirm="Удалить службу MASQUE с сервера {{ s.name }}? Она исчезнет из подписок и ссылок профилей.">Удалить MASQUE</button>
   </div>
   {% endif %}
   <pre id="out" class="out" hidden></pre>
