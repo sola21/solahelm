@@ -20,13 +20,14 @@ from .ssh import Conn
 
 sh_echo = hy.sh_echo
 
-PROTOCOLS = ("vless", "vgrpc", "anytls", "trojan", "tuic", "ss", "naive")
+PROTOCOLS = ("vless", "vgrpc", "anytls", "trojan", "tuic", "ss", "naive", "stls")
 TAGS = {"vless": "vless-in", "vgrpc": "vless-grpc-in", "anytls": "anytls-in", "trojan": "trojan-in", "tuic": "tuic-in",
-        "ss": "ss-in", "naive": "naive-in"}
+        "ss": "ss-in", "naive": "naive-in", "stls": "shadowtls-in"}
+INNER_TAGS = ("ss-st-in",)               # служебные inbound'ы панели (внутренний Shadowsocks за ShadowTLS)
 NAMES = {"vless": "VLESS", "vgrpc": "VLESS gRPC", "anytls": "AnyTLS", "trojan": "Trojan", "tuic": "TUIC",
-         "ss": "Shadowsocks", "naive": "Naive", "masque": "MASQUE"}
+         "ss": "Shadowsocks", "naive": "Naive", "stls": "ShadowTLS", "masque": "MASQUE"}
 DEFAULT_PORTS = {"vless": 8443, "vgrpc": 8445, "anytls": 9443, "trojan": 7443, "tuic": 8444, "ss": 2443, "naive": 6443,
-                 "masque": 5443}
+                 "stls": 4443, "masque": 5443}
 REALITY_PROTOS = ("vless", "vgrpc")             # общие ключи Reality и домен маскировки reality_sni
 TLS_PROTOS = ("anytls", "trojan", "tuic", "naive")      # используют сертификат домена сервера (общие поля anytls_domain / anytls_cert)
 UDP_PROTOS = ("tuic",)                         # порт UDP; ss — TCP и UDP; остальные TCP
@@ -181,6 +182,19 @@ def build_inbounds(s: dict, rows: list[dict]) -> list[dict]:
             "method": SS_METHOD, "password": security.decrypt(s["ss_key"]),
             "users": [{"name": r["username"], "password": r["ss_key"]} for r in rows],
         })
+    if s.get("stls_enabled"):
+        # ShadowTLS v3: снаружи настоящее рукопожатие TLS 1.3 с чужим сайтом, внутри Shadowsocks-2022 на loopback
+        ensure_ss(s)
+        out.append({
+            "type": "shadowtls", "tag": TAGS["stls"], "listen": "::", "listen_port": int(s["stls_port"]),
+            "detour": INNER_TAGS[0], "version": 3,
+            "users": [{"name": r["username"], "password": security.stls_password(r["ss_key"])} for r in rows],
+            "handshake": {"server": s["stls_sni"], "server_port": 443}, "strict_mode": True,
+        })
+        out.append({
+            "type": "shadowsocks", "tag": INNER_TAGS[0], "listen": "127.0.0.1", "network": "tcp",
+            "method": SS_METHOD, "password": security.decrypt(s["ss_key"]),
+        })
     if s.get("naive_enabled"):
         out.append({
             "type": "naive", "tag": TAGS["naive"], "listen": "::", "listen_port": int(s["naive_port"]),
@@ -192,7 +206,7 @@ def build_inbounds(s: dict, rows: list[dict]) -> list[dict]:
 
 def merge_config(existing: dict | None, s: dict, rows: list[dict]) -> dict:
     cfg = existing if existing is not None else {"log": {"level": "warn", "timestamp": True}}
-    panel_tags = set(TAGS.values())
+    panel_tags = set(TAGS.values()) | set(INNER_TAGS)
     cfg["inbounds"] = [i for i in cfg.get("inbounds", []) if i.get("tag") not in panel_tags] + build_inbounds(s, rows)
     if not cfg.get("outbounds"):
         cfg["outbounds"] = [{"type": "direct", "tag": "direct"}]
@@ -438,6 +452,13 @@ def build_install_script(s: dict, cfg_text: str | None, opts: dict, mq_text: str
         L += [sh_echo(ok_msg),
               f"echo | timeout 15 openssl s_client -connect {sni}:443 -servername {sni} -tls1_3 >/dev/null 2>&1 || "
               f"{{ {sh_echo(bad_msg)}; exit 1; }}"]
+    if opts.get("stls"):
+        ssni = shlex.quote(s["stls_sni"])
+        ok_msg = f"== Проверка, что {s['stls_sni']} подходит для ShadowTLS (TLS 1.3)"
+        bad_msg = f"!! {s['stls_sni']} не отвечает по TLS 1.3 — выберите другой домен для рукопожатия"
+        L += [sh_echo(ok_msg),
+              f"echo | timeout 15 openssl s_client -connect {ssni}:443 -servername {ssni} -tls1_3 >/dev/null 2>&1 || "
+              f"{{ {sh_echo(bad_msg)}; exit 1; }}"]
     if main_on:
         L += [sh_echo("== [2/7] Установка sing-box (sing-box.app, стабильная версия)"),
               "if ! command -v sing-box >/dev/null 2>&1; then curl -fsSL https://sing-box.app/install.sh | sh; fi",
@@ -528,7 +549,8 @@ def provision(sid: int, opts: dict, log) -> None:
         if opts.get("assign_all"):
             for u in db.q("SELECT id FROM users"):
                 db.ex("INSERT OR IGNORE INTO user_servers(user_id,server_id) VALUES(?,?)", (u["id"], sid))
-        upd = {"reality_sni": opts["reality_sni"], "anytls_domain": opts["anytls_domain"], "anytls_cert": opts["anytls_cert"],
+        upd = {"reality_sni": opts["reality_sni"], "stls_sni": opts.get("stls_sni") or s.get("stls_sni") or "www.lg.com",
+               "anytls_domain": opts["anytls_domain"], "anytls_cert": opts["anytls_cert"],
                "anytls_insecure": 1 if opts["anytls_cert"] == "selfsigned" else 0,
                "masque_enabled": int(opts["masque"]), "masque_port": opts["masque_port"]}
         for p in PROTOCOLS:
@@ -539,7 +561,7 @@ def provision(sid: int, opts: dict, log) -> None:
             ensure_reality(s2)
         if opts["vgrpc"]:
             ensure_grpc(s2)
-        if opts["ss"]:
+        if opts["ss"] or opts["stls"]:
             ensure_ss(s2)
         rows = hy.desired_rows(sid)
         main_on = enabled(s2)

@@ -10,9 +10,34 @@
 <title>{% block title %}{{ brand }}{% endblock %}</title>
 <link rel="icon" href="{{ static }}/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="{{ static }}/app.css?v={{ version }}">
+{% if portal %}<link rel="stylesheet" href="{{ static }}/portal.css?v={{ version }}">
+<script src="{{ static }}/portal.js?v={{ version }}"></script>{% endif %}
 </head>
-<body data-base="{{ base }}" data-csrf="{{ csrf }}">
-{% if sess %}
+<body data-base="{{ base }}" data-csrf="{{ csrf }}"{% if portal %} class="portal"{% endif %}>
+{% if portal %}
+{% set host = (request.url.hostname or brand)|lower %}{% if ':' in host or host.replace('.', '').isdigit() %}{% set host = brand|lower %}{% endif %}{% set dot = host.rfind('.') %}
+<header class="p-head wrap">
+  <a class="p-brand" href="{{ pub }}/">
+    <span class="p-mark" aria-hidden="true">{{ host[0] }}</span>
+    <span><span class="p-name">{% if dot > 0 %}{{ host[:dot] }}<span>{{ host[dot:] }}</span>{% else %}{{ host }}{% endif %}</span>
+      <span class="p-sub">Мои подключения</span></span>
+  </a>
+  <div class="p-controls">
+    {{ langsw(request.url.path, request.url.query) }}
+    <button class="chip icon" id="themeBtn" type="button" title="Светлая / тёмная тема" aria-label="Светлая / тёмная тема">
+      <svg class="theme-ico-dark" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="theme-ico-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
+    {% if client %}
+    <form method="post" action="{{ pub }}/logout">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <span class="p-who">{{ client.name or client.login }}</span>
+      <button class="chip txt" title="Выйти"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Выйти</span></button>
+    </form>
+    {% endif %}
+  </div>
+</header>
+{% elif sess %}
 <header class="top">
   <a class="brand" href="{{ base }}/"><img src="{{ static }}/favicon.svg" alt=""> {{ brand }}</a>
   <nav>
@@ -44,7 +69,7 @@
   </form>
 </header>
 {% endif %}
-{% if not sess and not client %}<div class="lang-float">{{ langsw(request.url.path, request.url.query) }}</div>{% endif %}
+{% if not sess and not client and not portal %}<div class="lang-float">{{ langsw(request.url.path, request.url.query) }}</div>{% endif %}
 <main class="wrap">
   {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
   {% if err %}<div class="flash err">{{ err }}</div>{% endif %}

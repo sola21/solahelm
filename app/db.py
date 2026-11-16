@@ -164,6 +164,9 @@ SERVER_COLS = {
     "trojan_port": "INTEGER DEFAULT 7443",
     "tuic_enabled": "INTEGER DEFAULT 0",
     "tuic_port": "INTEGER DEFAULT 8444",            # UDP
+    "stls_enabled": "INTEGER DEFAULT 0",            # ShadowTLS v3 + внутренний Shadowsocks-2022
+    "stls_port": "INTEGER DEFAULT 4443",
+    "stls_sni": "TEXT DEFAULT 'www.lg.com'",          # сайт, с которым сервер делает настоящее рукопожатие TLS 1.3
     "naive_enabled": "INTEGER DEFAULT 0",
     "naive_port": "INTEGER DEFAULT 6443",
     "ss_enabled": "INTEGER DEFAULT 0",

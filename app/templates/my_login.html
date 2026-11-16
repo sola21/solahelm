@@ -1,9 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Вход · Мои подключения{% endblock %}
 {% block content %}
-<div class="login">
-  <form method="post" action="{{ pub }}/login" class="card">
-    <div class="login-head"><img src="{{ static }}/favicon.svg" alt=""><h1>Мои подключения</h1></div>
+<div class="p-login">
+  <section class="p-tile p-hero">
+    <div>
+      <div class="p-hero-top"><span>Личный кабинет</span><span class="p-word">VPN</span></div>
+      <h1>Мои<br>подключения</h1>
+      <p>Подписки, ссылки и QR-коды для ваших устройств — всё в одном месте.</p>
+    </div>
+    <div class="p-pills">
+      <span class="p-pill"><i class="p-dot up"></i>Hysteria2 · VLESS · TUIC</span>
+      <span class="p-pill">Android · iOS · Windows · macOS</span>
+    </div>
+  </section>
+
+  <form method="post" action="{{ pub }}/login" class="p-tile p-form" style="--i:1">
+    <h2>Вход</h2>
+    <p class="small muted">Логин и пароль выдаёт администратор.</p>
     {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
     <label>Логин<input name="login" autocomplete="username" required autofocus></label>
     <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>

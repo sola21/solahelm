@@ -779,7 +779,7 @@ def update_core(sid: int, log) -> None:
 
 
 # ---------------- удаление службы с сервера ----------------
-SB_FLAGS = ("vless", "vgrpc", "anytls", "trojan", "tuic", "ss", "naive")
+SB_FLAGS = ("vless", "vgrpc", "anytls", "trojan", "tuic", "ss", "naive", "stls")
 
 
 def build_remove_script(s: dict, which: str) -> str:

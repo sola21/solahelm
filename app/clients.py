@@ -12,7 +12,7 @@ from ruamel.yaml import YAML
 from . import security
 
 PROTO_LABELS = {"hy2": "Hysteria2", "vless": "VLESS Reality", "vgrpc": "VLESS Reality gRPC", "anytls": "AnyTLS",
-                "trojan": "Trojan", "tuic": "TUIC v5", "ss": "Shadowsocks-2022", "naive": "Naive", "masque": "MASQUE"}
+                "trojan": "Trojan", "tuic": "TUIC v5", "ss": "Shadowsocks-2022", "naive": "Naive", "stls": "ShadowTLS v3", "masque": "MASQUE"}
 NO_URI = ("masque",)          # у MASQUE нет общепринятой ссылки — клиенту отдаётся конфиг sing-box (JSON)
 SS_METHOD = "2022-blake3-aes-128-gcm"
 FLOW = "xtls-rprx-vision"
@@ -44,6 +44,8 @@ def protos(s: dict) -> list[str]:
             out.append(p)
     if s.get("ss_enabled") and s.get("ss_key"):
         out.append("ss")
+    if s.get("stls_enabled") and s.get("ss_key") and s.get("stls_sni"):
+        out.append("stls")
     if s.get("masque_enabled") and s.get("anytls_domain"):
         out.append("masque")
     return out
@@ -79,6 +81,13 @@ def anytls_endpoint(s: dict) -> dict:
 def ss_endpoint(s: dict) -> dict:
     host = (s.get("public_host") or "").strip() or s["host"]
     return {"host": host, "port": int(s["ss_port"]), "method": SS_METHOD}
+
+
+def stls_endpoint(s: dict) -> dict:
+    """ShadowTLS v3: подключение к IP/имени сервера, SNI рукопожатия — чужой сайт (stls_sni); внутри Shadowsocks-2022 с ключом сервера."""
+    host = (s.get("public_host") or "").strip() or s["host"]
+    return {"host": host, "port": int(s["stls_port"]), "sni": s["stls_sni"], "method": SS_METHOD,
+            "ss_password": security.decrypt(s["ss_key"])}
 
 
 def ss_password(user: dict, s: dict) -> str:
@@ -137,6 +146,11 @@ def uri(user: dict, s: dict, proto: str = "hy2") -> str:
         e = tls_endpoint(s, "naive")
         return (f"naive+https://{quote(user['username'], safe='')}:{quote(user['password'], safe='')}"
                 f"@{_fmt_host(e['host'])}:{e['port']}#{name}")
+    if proto == "stls":
+        e = stls_endpoint(s)
+        plugin = f"shadow-tls;host={e['sni']};password={security.stls_password(user['ss_key'])};version=3"
+        return (f"ss://{e['method']}:{quote(e['ss_password'], safe='')}@{_fmt_host(e['host'])}:{e['port']}"
+                f"/?plugin={quote(plugin, safe='')}#{name}")
     if proto == "ss":
         e = ss_endpoint(s)
         # для AEAD-2022 userinfo — обычный (не base64) «метод:пароль» с процентным кодированием (SIP002)
@@ -225,6 +239,12 @@ def clash_yaml(user: dict, servers: list[dict], template: dict | None = None) ->
                            "grpc-opts": {"grpc-service-name": e["service"]},
                            "reality-opts": {"public-key": e["pbk"], "short-id": e["sid"]},
                            "client-fingerprint": "chrome"})
+            elif proto == "stls":
+                e = stls_endpoint(s)
+                add(name, {"type": "ss", "server": e["host"], "port": e["port"], "cipher": e["method"],
+                           "password": e["ss_password"], "udp": True, "plugin": "shadow-tls",
+                           "client-fingerprint": "chrome",
+                           "plugin-opts": {"host": e["sni"], "password": security.stls_password(user["ss_key"]), "version": 3}})
             elif proto in ("naive", "masque"):
                 continue                       # Clash Meta / mihomo не поддерживает Naive и MASQUE
             elif proto == "anytls":
@@ -340,6 +360,15 @@ def singbox_outbound(user: dict, s: dict, proto: str, tag: str) -> dict | None:
         e = ss_endpoint(s)
         return {"type": "shadowsocks", "tag": tag, "server": e["host"], "server_port": e["port"], "method": e["method"],
                 "password": ss_password(user, s)}
+    if proto == "stls":
+        # два звена: ShadowTLS (рукопожатие + транспорт) и Shadowsocks поверх него; в подписку попадает Shadowsocks, ShadowTLS — служебный
+        e = stls_endpoint(s)
+        tls_tag = tag + "~tls"
+        return {"type": "shadowsocks", "tag": tag, "method": e["method"], "password": e["ss_password"], "detour": tls_tag,
+                "_server": e["host"],
+                "_extra": [{"type": "shadowtls", "tag": tls_tag, "server": e["host"], "server_port": e["port"], "version": 3,
+                            "password": security.stls_password(user["ss_key"]),
+                            "tls": {"enabled": True, "server_name": e["sni"], "utls": {"enabled": True, "fingerprint": "chrome"}}}]}
     if proto == "masque":
         e = masque_endpoint(s)
         return {"type": "masque-client", "tag": tag, "server": e["host"], "server_port": e["port"],
@@ -378,9 +407,11 @@ def singbox_json(user: dict, servers: list[dict], masque: bool = False) -> str:
             if not o:
                 continue
             tags.append(tag)
+            host = o.pop("_server", None) or o["server"]
+            outbounds.extend(o.pop("_extra", []))
             (endpoints if proto == "masque" else outbounds).append(o)
-            if not _is_ip(o["server"]) and o["server"] not in hosts:
-                hosts.append(o["server"])
+            if not _is_ip(host) and host not in hosts:
+                hosts.append(host)
     sel = ["auto"] + tags if len(tags) > 1 else list(tags)
     groups = [{"type": "selector", "tag": "proxy", "outbounds": sel or ["direct"], "default": sel[0] if sel else "direct"}]
     if len(tags) > 1:

@@ -3,7 +3,7 @@
 {% block title %}{{ s.name }} · {{ brand }}{% endblock %}
 {% block content %}
 {% set st = s.st %}{% set info = s.info %}
-{% set sb_main = s.vless_enabled or s.vgrpc_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled %}
+{% set sb_main = s.vless_enabled or s.vgrpc_enabled or s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.ss_enabled or s.naive_enabled or s.stls_enabled %}
 <div class="head">
   <h1>{{ s.name }} {{ svc_badge(st) }} {{ sync_badge(s) }}</h1>
   <div class="actions">
@@ -265,6 +265,7 @@
     {% if s.trojan_enabled %}<span class="badge ok">Trojan :{{ s.trojan_port }}</span>{% endif %}
     {% if s.tuic_enabled %}<span class="badge ok">TUIC :{{ s.tuic_port }} UDP</span>{% endif %}
     {% if s.naive_enabled %}<span class="badge ok">Naive :{{ s.naive_port }}</span>{% endif %}
+    {% if s.stls_enabled %}<span class="badge ok">ShadowTLS :{{ s.stls_port }} → {{ s.stls_sni }}</span>{% endif %}
     {% if s.ss_enabled %}<span class="badge ok">Shadowsocks-2022 :{{ s.ss_port }}</span>{% endif %}
     {% if (s.anytls_enabled or s.trojan_enabled or s.tuic_enabled or s.naive_enabled or s.masque_enabled) %}<span class="badge">{{ s.anytls_domain }}{{ ' · самоподписанный' if s.anytls_insecure }}</span>{% endif %}</p>
   {% endif %}
@@ -320,6 +321,16 @@
         <label class="check"><input type="checkbox" name="ss" {{ 'checked' if s.ss_enabled }}> Shadowsocks-2022 (TCP + UDP): без TLS и домена, лёгкий, но заметнее для DPI</label>
         <label>Порт<input name="ss_port" type="number" min="1" max="65535" value="{{ s.ss_port or 2443 }}"></label>
       </div>
+    </fieldset>
+    <fieldset>
+      <legend>ShadowTLS v3</legend>
+      <p class="small muted">Снаружи сервер делает настоящее рукопожатие TLS 1.3 с чужим сайтом (домен ниже), а внутри — Shadowsocks-2022. Не нужен ни свой домен, ни сертификат.
+        Лучше брать неброский сайт <b>не за Cloudflare</b> с TLS 1.3. Порт 443 свободен, только если на сервере нет Hysteria2.</p>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="stls" {{ 'checked' if s.stls_enabled }}> ShadowTLS v3 (TCP): маскируется под обычный TLS-сайт</label>
+        <label>Порт (TCP)<input name="stls_port" type="number" min="1" max="65535" value="{{ s.stls_port or 4443 }}"></label>
+      </div>
+      <label>Домен для рукопожатия (сайт с TLS 1.3)<input name="stls_sni" value="{{ s.stls_sni or 'www.lg.com' }}"><small>Домен не ваш: сервер для посторонних ведёт себя как этот сайт</small></label>
     </fieldset>
     <fieldset>
       <legend>MASQUE (экспериментально)</legend>

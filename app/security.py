@@ -220,6 +220,12 @@ class LoginLimiter:
 limiter = LoginLimiter()
 
 
+def stls_password(user_key: str) -> str:
+    """Пароль профиля для ShadowTLS: производная от его ключа Shadowsocks (отдельного столбца не нужно)."""
+    import hashlib
+    return hashlib.sha256(("shadowtls:" + user_key).encode()).hexdigest()[:24]
+
+
 def gen_password(n: int = 20) -> str:
     alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(alphabet) for _ in range(n))

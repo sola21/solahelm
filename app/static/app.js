@@ -284,9 +284,9 @@
       const fd = new FormData(provSb);
       const body = {
         ufw: fd.has("ufw"), assign_all: fd.has("assign_all"),
-        reality_sni: fd.get("reality_sni"), anytls_domain: fd.get("anytls_domain"), anytls_cert: fd.get("anytls_cert"), le_email: fd.get("le_email") || "",
+        reality_sni: fd.get("reality_sni"), anytls_domain: fd.get("anytls_domain"), anytls_cert: fd.get("anytls_cert"), le_email: fd.get("le_email") || "", stls_sni: fd.get("stls_sni") || "",
       };
-      for (const p of ["vless", "vgrpc", "anytls", "trojan", "tuic", "ss", "naive", "masque"]) {
+      for (const p of ["vless", "vgrpc", "anytls", "trojan", "tuic", "ss", "naive", "stls", "masque"]) {
         body[p] = fd.has(p);
         body[p + "_port"] = +fd.get(p + "_port");
       }

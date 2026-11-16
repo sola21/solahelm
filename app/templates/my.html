@@ -1,96 +1,114 @@
 {% extends "base.html" %}
-{% from "_macros.html" import user_badge, bar, conn_links, client_apps, sb_sub_links %}
+{% from "_macros.html" import bar, conn_links, client_apps, sb_sub_links %}
 {% block title %}Мои подключения{% endblock %}
 {% block content %}
-<div class="head"><h1>Мои подключения</h1></div>
 
 {% if not profiles %}
-<div class="card empty">У вас пока нет профилей подключения. Обратитесь к администратору.</div>
+<div class="p-grid">
+  <section class="p-tile p-hero p-span">
+    <div class="p-hero-top"><span>Мои подключения</span><span class="p-word">VPN</span></div>
+    <h1>Пока пусто</h1>
+    <p>У вас пока нет профилей подключения. Обратитесь к администратору.</p>
+  </section>
+</div>
 {% endif %}
 
 {% for u in profiles %}
-<section class="card profile">
-  <div class="srv-head"><b class="big">{{ u.username }}</b> {{ user_badge(u) }}</div>
-  <dl class="kv">
-    <dt>Действует до</dt><dd>{{ u.expires_at|ts if u.expires_at else 'бессрочно' }}</dd>
-    <dt>Трафик</dt><dd>{{ (u.tx+u.rx)|bytes }} {% if u.traffic_limit %}из {{ u.traffic_limit|bytes }}{% else %}(без лимита){% endif %}</dd>
-  </dl>
-  {% if u.traffic_limit %}{{ bar(u.tx+u.rx, u.traffic_limit) }}{% endif %}
+{% set on = u.state[0] == 'on' %}
+<div class="p-grid profile">
+  <section class="p-tile p-hero p-span">
+    <div class="p-hero-top"><span>Профиль подключения</span><span class="p-word">VPN</span></div>
+    <h1>{{ u.username }}</h1>
+    <div class="p-pills">
+      <span class="p-pill"><i class="p-dot {{ 'up' if on else 'down' }}"></i>{{ u.state[1] }}</span>
+      <span class="p-pill">Действует до {{ u.expires_at|ts if u.expires_at else 'бессрочно' }}</span>
+      <span class="p-pill">Трафик {{ (u.tx+u.rx)|bytes }}{% if u.traffic_limit %} из {{ u.traffic_limit|bytes }}{% else %} · без лимита{% endif %}</span>
+      {% if on and u.conns %}<span class="p-pill">Серверов: {{ u.conns|length }}</span>{% endif %}
+    </div>
+    {% if u.traffic_limit %}{{ bar(u.tx+u.rx, u.traffic_limit) }}{% endif %}
+    {% if not on %}<div class="flash warn mt">Профиль сейчас не активен ({{ u.state[1]|lower }}). Для продления обратитесь к администратору.</div>{% endif %}
+  </section>
 
-  {% if u.state[0] != 'on' %}
-  <div class="flash warn">Профиль сейчас не активен ({{ u.state[1]|lower }}). Для продления обратитесь к администратору.</div>
-  {% else %}
-  <details class="howto">
-    <summary>Как подключиться</summary>
+  {% if on %}
+  <section class="p-tile p-span" style="--i:1">
+    <p class="p-label">Подписка · все серверы</p>
+    <div class="p-sub-qr">
+      <div class="qrwrap">{{ u.sub_qr|safe }}</div>
+      <div>
+        <h3>Добавьте подписку в приложение</h3>
+        <p class="small muted">Отсканируйте QR или скопируйте ссылку. При изменении серверов приложение обновит их само.</p>
+        <div class="copyline"><code id="sub{{ u.id }}">{{ u.sub_url }}</code><button class="btn sm primary" data-copy="#sub{{ u.id }}">Копировать</button></div>
+        <div class="copyline"><code id="subc{{ u.id }}">{{ u.sub_url }}/clash</code><button class="btn sm" data-copy="#subc{{ u.id }}">Копировать</button></div>
+        {{ sb_sub_links(u.sub_url, u.has_masque, u.id) }}
+        <div class="btns"><a class="btn sm" href="{{ pub }}/clash/{{ u.id }}.yaml">Скачать Clash YAML</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="p-tile" style="--i:2">
+    <p class="p-label">Как подключиться</p>
     <ol class="small">
       <li>Установите приложение (названия — ссылки на страницы загрузки):{{ client_apps() }}</li>
-      <li>Проще всего добавить <b>подписку</b>: скопируйте ссылку или отсканируйте QR ниже. При изменении серверов приложение обновит их само.</li>
-      <li>Можно добавить и отдельный сервер: по ссылке или по QR. На сервере может быть несколько протоколов
-        (Hysteria2, VLESS Reality, VLESS gRPC, AnyTLS, Trojan, TUIC, Shadowsocks, Naive, MASQUE) — используйте любой.
+      <li>Проще всего добавить <b>подписку</b>: скопируйте ссылку или отсканируйте QR выше.</li>
+      <li>На сервере может быть несколько протоколов (Hysteria2, VLESS Reality, VLESS gRPC, AnyTLS, Trojan, TUIC, Shadowsocks, ShadowTLS, Naive, MASQUE).
         Если один не работает в вашей сети, попробуйте другой: чаще всего выручают <b>Hysteria2</b> и <b>VLESS gRPC</b>.</li>
     </ol>
-  </details>
+  </section>
 
-  <div class="cols">
-    <div>
-      <h3>Подписка (все серверы)</h3>
-      <div class="qrwrap">{{ u.sub_qr|safe }}</div>
-      <div class="copyline"><code id="sub{{ u.id }}">{{ u.sub_url }}</code><button class="btn sm primary" data-copy="#sub{{ u.id }}">Копировать</button></div>
-      <div class="copyline"><code id="subc{{ u.id }}">{{ u.sub_url }}/clash</code><button class="btn sm" data-copy="#subc{{ u.id }}">Копировать</button></div>
-      {{ sb_sub_links(u.sub_url, u.has_masque, u.id) }}
-      <div class="btns"><a class="btn sm" href="{{ pub }}/clash/{{ u.id }}.yaml">Скачать Clash YAML</a></div>
-    </div>
-  </div>
-
-  {% if u.conns %}
-  <h3 class="mt">Серверы по отдельности</h3>
-  <p class="small muted">Обычно хватает подписки выше. Ссылки и QR отдельных серверов — если нужно добавить только один сервер или протокол: нажмите на сервер, чтобы раскрыть.</p>
-  {% for s in u.conns %}
-    <details class="card conn inner srv-fold">
-      <summary><b>{{ s.name }}</b> <span class="small muted">· протоколов: {{ s.links|length }} ({{ s.links|map(attribute='label')|join(', ') }})</span></summary>
-      {{ conn_links(s.links, u.id, s.id, 'my', u.sub_url) }}
-    </details>
-  {% endfor %}
-  {% else %}
-  <p class="muted">К профилю пока не подключены серверы.</p>
+  <section class="p-tile" style="--i:3">
+    <p class="p-label">Серверы по отдельности</p>
+    {% if u.conns %}
+    <p class="small muted">Обычно хватает подписки. Ссылки и QR отдельных серверов — если нужно добавить только один сервер или протокол.</p>
+    {% for s in u.conns %}
+      <details class="p-fold">
+        <summary>{{ s.name }} <span class="small muted">· {{ s.links|map(attribute='label')|join(', ') }}</span></summary>
+        {{ conn_links(s.links, u.id, s.id, 'my', u.sub_url) }}
+      </details>
+    {% endfor %}
+    {% else %}
+    <p class="muted">К профилю пока не подключены серверы.</p>
+    {% endif %}
+  </section>
   {% endif %}
-  {% endif %}
-</section>
+</div>
 {% endfor %}
 
-<details class="card">
-  <summary><b>Подключённые приложения</b>{% if apps %} <span class="small muted">· {{ apps|length }}</span>{% endif %}</summary>
-  <p class="small muted mt">Приложения, в которые вы вошли логином и паролем от кабинета (например, SolaHelm Client): они сами подтягивают профили и подписки. Если устройство потеряно или больше не нужно — отключите его. Смена пароля отключает все приложения.</p>
-  {% if apps %}
-  <table class="tbl">
-    <thead><tr><th>Устройство</th><th>Вход</th><th>Последняя активность</th><th>IP</th><th></th></tr></thead>
-    <tbody>
-    {% for a in apps %}
-      <tr>
-        <td>{{ a.device or '—' }}</td>
-        <td class="nowrap">{{ a.created|ts }}</td>
-        <td class="nowrap">{{ a.last_used|ago }}</td>
-        <td class="mono">{{ a.last_ip or '—' }}</td>
-        <td class="r"><form method="post" action="{{ pub }}/apps/{{ a.id }}/revoke" style="display:inline" data-confirm="Отключить приложение {{ a.device }}? Чтобы снова им пользоваться, войдите в нём заново."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">Отключить</button></form></td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted">Нет подключённых приложений.</p>
-  {% endif %}
-</details>
+<div class="p-grid">
+  <section class="p-tile" style="--i:4">
+    <p class="p-label">Подключённые приложения{% if apps %} · {{ apps|length }}{% endif %}</p>
+    <p class="small muted">Приложения, в которые вы вошли логином и паролем от кабинета (например, SolaHelm Client): они сами подтягивают профили и подписки. Если устройство потеряно или больше не нужно — отключите его. Смена пароля отключает все приложения.</p>
+    {% if apps %}
+    <table class="tbl">
+      <thead><tr><th>Устройство</th><th>Вход</th><th>Последняя активность</th><th>IP</th><th></th></tr></thead>
+      <tbody>
+      {% for a in apps %}
+        <tr>
+          <td>{{ a.device or '—' }}</td>
+          <td class="nowrap">{{ a.created|ts }}</td>
+          <td class="nowrap">{{ a.last_used|ago }}</td>
+          <td class="mono">{{ a.last_ip or '—' }}</td>
+          <td class="r"><form method="post" action="{{ pub }}/apps/{{ a.id }}/revoke" style="display:inline" data-confirm="Отключить приложение {{ a.device }}? Чтобы снова им пользоваться, войдите в нём заново."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">Отключить</button></form></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Нет подключённых приложений.</p>
+    {% endif %}
+  </section>
 
-<details class="card">
-  <summary><b>Сменить пароль от кабинета</b></summary>
-  <form method="post" action="{{ pub }}/password" class="form mt">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <div class="row">
-      <label>Текущий пароль<input type="password" name="current" autocomplete="current-password" required></label>
-      <label>Новый пароль (от 8 символов)<input type="password" name="new" autocomplete="new-password" minlength="8" required></label>
-      <label>Повторите<input type="password" name="new2" autocomplete="new-password" minlength="8" required></label>
-    </div>
-    <button class="btn primary">Сменить пароль</button>
-  </form>
-</details>
+  <section class="p-tile" style="--i:5">
+    <p class="p-label">Безопасность</p>
+    <details>
+      <summary>Сменить пароль от кабинета</summary>
+      <form method="post" action="{{ pub }}/password" class="form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>Текущий пароль<input type="password" name="current" autocomplete="current-password" required></label>
+        <label>Новый пароль (от 8 символов)<input type="password" name="new" autocomplete="new-password" minlength="8" required></label>
+        <label>Повторите<input type="password" name="new2" autocomplete="new-password" minlength="8" required></label>
+        <button class="btn primary wide">Сменить пароль</button>
+      </form>
+    </details>
+  </section>
+</div>
 {% endblock %}

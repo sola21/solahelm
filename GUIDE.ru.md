@@ -87,7 +87,7 @@ sudo nginx -t && sudo systemctl reload nginx
 - домен: `vps1.mooo.com` (запись A на IP этого VPS, шаг 1; без неё сертификат не выпустится, а на VPS должен быть
   свободен порт 80);
 - e-mail для сертификата: ваш адрес;
-- выберите Hysteria2 и/или протоколы sing-box: VLESS Reality, AnyTLS, Trojan, TUIC v5, Shadowsocks-2022, Naive — каждый
+- выберите Hysteria2 и/или протоколы sing-box: VLESS Reality, AnyTLS, Trojan, TUIC v5, Shadowsocks-2022, ShadowTLS v3, Naive — каждый
   включается отдельно и работает на своём порту (откройте эти порты в файрволе VPS). Несколько протоколов — запасные каналы,
   если один заблокируют.
 

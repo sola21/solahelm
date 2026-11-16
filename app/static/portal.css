@@ -1,0 +1,210 @@
+/* Кабинет клиента и его страница входа: тёмный «bento»-стиль с акцентным цветом.
+   Админка этот файл не подключает. Тема и акцент задаются portal.js (data-theme на <html>, --accent). */
+
+html.portal, body.portal {
+  --bg: #0c0d0b; --bg-2: #121410; --tile: #151713; --tile-hi: #1b1e18;
+  --line: rgba(255,255,255,.07); --line-strong: rgba(255,255,255,.16);
+  --text: #f1f3ea; --muted: #959b8a; --faint: #5c6255;
+  --accent: #d7ff3c; --accent-ink: #0c0d0b; --ink-rgb: 12,13,11; --glow-alpha: .16;
+  --ok: #3ddc84; --warn: #ffb547; --err: #ff5d5d;
+  --panel: var(--tile); --panel2: var(--tile-hi); --accent2: var(--accent); --radius: 14px;
+}
+html.portal[data-theme="light"], html.portal[data-theme="light"] body.portal {
+  --bg: #f4f3ee; --bg-2: #ebeae3; --tile: #ffffff; --tile-hi: #fbfbf7;
+  --line: rgba(0,0,0,.08); --line-strong: rgba(0,0,0,.18);
+  --text: #141511; --muted: #5c6157; --faint: #9ea294;
+  --accent: #c4ef14; --accent-ink: #141511; --glow-alpha: .10;
+  --ok: #138a4b; --warn: #b26b00; --err: #c0261f;
+}
+@media (prefers-color-scheme: light) {
+  html.portal:not([data-theme="dark"]), html.portal:not([data-theme="dark"]) body.portal {
+    --bg: #f4f3ee; --bg-2: #ebeae3; --tile: #ffffff; --tile-hi: #fbfbf7;
+    --line: rgba(0,0,0,.08); --line-strong: rgba(0,0,0,.18);
+    --text: #141511; --muted: #5c6157; --faint: #9ea294;
+    --accent: #c4ef14; --accent-ink: #141511; --glow-alpha: .10;
+    --ok: #138a4b; --warn: #b26b00; --err: #c0261f;
+  }
+}
+/* свой акцент, выбранный на главном сайте (portal.js кладёт его в style у <html>) */
+html.portal[style*="--accent"] body.portal { --accent: inherit; --accent-ink: inherit; --ink-rgb: inherit; }
+
+html.portal { background: var(--bg); }
+body.portal {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font: 14.5px/1.5 'Onest', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 26px 26px;
+  transition: background-color .3s, color .3s;
+}
+.portal a { color: var(--text); }
+.portal a:hover { text-decoration: none; }
+.portal .mono, .portal code, .portal .p-host { font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+.portal .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(16px, 3.2vw, 40px); }
+.portal .muted { color: var(--muted); }
+.portal .small { font-size: 13px; }
+
+/* ---------- шапка ---------- */
+.p-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.portal .p-head { padding-top: clamp(18px, 3vh, 32px); padding-bottom: clamp(18px, 3vh, 32px); }
+.p-brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.p-mark { width: 42px; height: 42px; flex: none; border-radius: 12px; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 26px; line-height: 1;
+  padding-bottom: 4px; transform: rotate(-6deg); transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+.p-brand:hover .p-mark { transform: rotate(0) scale(1.05); }
+.p-name { display: block; font-weight: 700; font-size: 22px; letter-spacing: -.02em; line-height: 1.1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-name span { color: var(--faint); font-weight: 500; }
+.p-sub { display: block; font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+.p-controls { display: flex; align-items: center; gap: 8px; flex: none; }
+.p-controls form { margin: 0; display: contents; }
+.chip, .portal .lang a {
+  height: 40px; padding: 0 15px; border-radius: 999px; border: 1px solid var(--line); background: var(--tile);
+  display: inline-flex; align-items: center; gap: 8px; font: 600 13px/1 inherit; color: var(--text); cursor: pointer;
+  transition: border-color .2s, transform .2s, background-color .2s;
+}
+.chip:hover, .portal .lang a:hover { border-color: var(--line-strong); }
+.chip:active { transform: scale(.96); }
+.chip.icon { width: 40px; padding: 0; justify-content: center; }
+.chip svg { width: 16px; height: 16px; flex: none; }
+.portal .lang { display: inline-flex; gap: 0; border: 0; background: none; padding: 0; }
+.portal .lang a { border-radius: 0; padding: 0 12px; margin-left: -1px; }
+.portal .lang a:first-child { border-radius: 999px 0 0 999px; margin-left: 0; }
+.portal .lang a:last-child { border-radius: 0 999px 999px 0; }
+.portal .lang a.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.p-who { font-size: 13px; color: var(--muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-ico-light { display: none; }
+html.portal[data-theme="light"] .theme-ico-light { display: block; }
+html.portal[data-theme="light"] .theme-ico-dark { display: none; }
+
+/* ---------- плитки ---------- */
+.p-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(12px, 1.2vw, 18px); }
+.p-grid + .p-grid { margin-top: clamp(12px, 1.2vw, 18px); }
+.p-span { grid-column: 1 / -1; }
+.p-tile, .portal .card {
+  position: relative; border-radius: 20px; background: var(--tile); border: 1px solid var(--line);
+  padding: clamp(18px, 1.6vw, 26px); margin: 0; box-shadow: none;
+}
+.p-tile h2, .p-tile h3 { margin: 0 0 12px; font-weight: 600; letter-spacing: -.02em; }
+.p-tile h2 { font-size: 21px; }
+.p-tile h3 { font-size: 17px; }
+.p-label { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--faint); margin: 0 0 10px; }
+.p-hero { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.p-hero a { color: inherit; }
+.p-hero .p-label { color: var(--accent-ink); opacity: .55; }
+.p-hero-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; opacity: .8; }
+.p-word { font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
+.p-hero h1 { font-weight: 800; font-size: clamp(40px, 6vw, 76px); line-height: .95; letter-spacing: -.05em; margin: 16px 0 10px; word-break: break-word; }
+.p-hero p { margin: 0; font-size: 16px; opacity: .75; }
+.p-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.p-pill { padding: 7px 12px; border-radius: 999px; font-size: 12.5px; display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(var(--ink-rgb), .08); border: 1px solid rgba(var(--ink-rgb), .14); }
+.p-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .5; }
+.p-dot.up { background: #0f7a3d; opacity: 1; box-shadow: 0 0 0 4px rgba(var(--ink-rgb), .12); }
+.p-dot.down { background: #c0261f; opacity: 1; }
+.p-hero .bar { background: rgba(var(--ink-rgb), .12); margin-top: 14px; }
+.p-hero .bar i { background: var(--accent-ink); }
+
+/* ---------- вход ---------- */
+.p-login { display: grid; grid-template-columns: 1.15fr .85fr; gap: clamp(12px, 1.2vw, 18px);
+  max-width: 980px; margin: clamp(10px, 6vh, 70px) auto 0; }
+.p-login .p-hero { display: flex; flex-direction: column; justify-content: space-between; min-height: 360px; }
+.p-form { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.p-form h2 { margin-bottom: 4px; }
+.p-form .muted { margin: 0 0 14px; }
+
+/* ---------- элементы форм и кнопки ---------- */
+.portal label { color: var(--muted); font-size: 13px; }
+.portal input, .portal select, .portal textarea {
+  background: var(--bg-2); color: var(--text); border: 1px solid var(--line-strong); border-radius: 12px;
+  padding: 11px 14px; font: inherit; margin-top: 6px; transition: border-color .2s, box-shadow .2s;
+}
+.portal input:focus, .portal select:focus, .portal textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.portal .btn {
+  border-radius: 999px; border: 1px solid var(--line-strong); background: var(--tile-hi); color: var(--text);
+  font-weight: 600; padding: 9px 16px; transition: border-color .2s, transform .15s, background-color .2s;
+}
+.portal .btn:hover { border-color: var(--accent); }
+.portal .btn:active { transform: scale(.97); }
+.portal .btn.sm { padding: 6px 13px; font-size: 12.5px; }
+.portal .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.portal .btn.primary:hover { filter: brightness(1.05); }
+.portal .btn.wide { width: 100%; padding: 13px 16px; font-size: 15px; margin-top: 10px; }
+.portal .btn.danger { color: var(--err); }
+.portal .btn.danger:hover { border-color: var(--err); }
+.portal .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+/* ---------- значки, полосы, ссылки ---------- */
+.portal .badge { border-radius: 999px; padding: 3px 10px; font: 600 11px/1.4 'JetBrains Mono', ui-monospace, monospace;
+  background: var(--tile-hi); border: 1px solid var(--line-strong); color: var(--muted); }
+.portal .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.portal .badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.portal .badge.err { color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, transparent); background: color-mix(in srgb, var(--err) 12%, transparent); }
+.p-hero .badge { background: rgba(var(--ink-rgb), .1); border-color: rgba(var(--ink-rgb), .2); color: var(--accent-ink); }
+.portal .bar { height: 8px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.portal .bar i { border-radius: 999px; background: var(--accent); }
+.portal .bar.hot i { background: var(--warn); }
+.portal .copyline { display: flex; gap: 8px; align-items: stretch; margin: 8px 0; }
+.portal .copyline code { flex: 1; min-width: 0; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 9px 12px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; word-break: break-all; }
+.portal .qrwrap { background: #fff; border-radius: 16px; padding: 10px; display: inline-block; line-height: 0; }
+.portal .qrwrap svg { width: min(220px, 60vw); height: auto; }
+.p-sub-qr { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; }
+.portal .flash { border-radius: 14px; padding: 12px 16px; margin: 0 0 14px; border: 1px solid var(--line-strong); background: var(--tile); }
+.portal .flash.ok { border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.portal .flash.warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.portal .flash.err { border-color: color-mix(in srgb, var(--err) 45%, transparent); color: var(--err); }
+.p-hero .flash { background: rgba(var(--ink-rgb), .08); border-color: rgba(var(--ink-rgb), .2); color: var(--accent-ink); }
+
+/* раскрывающиеся блоки */
+.portal details > summary { cursor: pointer; color: var(--text); font-weight: 600; list-style: none; display: flex; align-items: center; gap: 10px; margin: 0; }
+.portal details > summary::-webkit-details-marker { display: none; }
+.portal details > summary::before { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint);
+  transform: rotate(-45deg); transition: transform .2s; flex: none; }
+.portal details[open] > summary::before { transform: rotate(45deg); }
+.portal details[open] > summary { margin-bottom: 12px; }
+.p-fold { border-top: 1px solid var(--line); padding: 14px 0; }
+.p-fold:first-of-type { border-top: 0; padding-top: 4px; }
+.portal .protos { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.portal .proto { background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.portal .proto .qrwrap svg { width: 100%; max-width: 200px; }
+.portal .apps { padding-left: 18px; color: var(--muted); }
+.portal .apps a, .portal .howto a { color: var(--text); border-bottom: 1px dashed var(--line-strong); }
+.portal ol { padding-left: 20px; color: var(--muted); }
+.portal ol li { margin: 6px 0; }
+.portal .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.portal .tbl th, .portal .tbl td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.portal .tbl th { color: var(--faint); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
+.portal .row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.portal .form label { display: block; }
+.portal .toast { border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.portal .foot { color: var(--faint); font-size: 12px; text-align: center; padding: 32px 0 40px; border: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .p-tile, .portal .card { animation: p-rise .5s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 50ms); }
+  @keyframes p-rise { from { opacity: 0; transform: translateY(12px); } }
+}
+
+@media (max-width: 860px) {
+  .p-login { grid-template-columns: 1fr; }
+  .p-login .p-hero { min-height: 230px; }
+  .p-grid { grid-template-columns: 1fr; }
+  .portal .row { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .p-sub, .p-who { display: none; }
+  .p-sub-qr { grid-template-columns: 1fr; }
+  .chip.txt span { display: none; }
+  .chip.txt { width: 40px; padding: 0; justify-content: center; }
+  .portal .tbl th:nth-child(2), .portal .tbl td:nth-child(2), .portal .tbl th:nth-child(4), .portal .tbl td:nth-child(4) { display: none; }
+}
+
+/* поправки поверх общих стилей админки */
+.portal h1, .portal h2, .portal h3 { text-transform: none; color: inherit; }
+.portal .p-tile h3 { color: var(--text); letter-spacing: -.02em; }
+.portal .p-hero .bar { background: rgba(var(--ink-rgb), .14); margin-top: 16px; }
+.portal .p-hero .bar i { background: var(--accent-ink); }
+.portal .copyline { align-items: center; }
+.portal .copyline .btn { flex: none; }
+@media (max-width: 860px) { .p-sub-qr { grid-template-columns: 1fr; } .p-sub-qr .qrwrap { justify-self: start; } }

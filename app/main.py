@@ -505,7 +505,7 @@ async def server_user_remove(request: Request, sid: int, uid: int, sess: dict = 
 async def access_page(request: Request, sess: dict = Depends(session_dep)):
     users = db.q("SELECT u.id, u.username, u.note, u.enabled, u.expires_at, u.traffic_limit, u.tx, u.rx, "
                  "c.login AS owner FROM users u LEFT JOIN clients c ON c.id=u.client_id ORDER BY u.username")
-    servers = db.q("SELECT id, name, enabled, hy2_enabled, vless_enabled, anytls_enabled, trojan_enabled, tuic_enabled, ss_enabled, naive_enabled, auto_assign, dirty, sync_error "
+    servers = db.q("SELECT id, name, enabled, hy2_enabled, vless_enabled, anytls_enabled, trojan_enabled, tuic_enabled, ss_enabled, naive_enabled, stls_enabled, auto_assign, dirty, sync_error "
                    "FROM servers ORDER BY name")
     linked = {f"{r['user_id']}:{r['server_id']}" for r in db.q("SELECT user_id, server_id FROM user_servers")}
     return render(request, "access.html", sess, nav="access", users=users, servers=servers, linked=linked)
@@ -728,6 +728,7 @@ async def api_provision_sb(request: Request, sid: int, sess: dict = Depends(csrf
         return jerr("Сервер не найден", 404)
     opts = {"ufw": bool(b.get("ufw")), "assign_all": bool(b.get("assign_all")),
             "reality_sni": str(b.get("reality_sni", "")).strip().lower(),
+            "stls_sni": str(b.get("stls_sni", "")).strip().lower(),
             "anytls_domain": str(b.get("anytls_domain", "")).strip().lower(),
             "anytls_cert": b.get("anytls_cert") if b.get("anytls_cert") in ("hysteria", "letsencrypt", "selfsigned") else "hysteria",
             "le_email": str(b.get("le_email", "")).strip()}
@@ -740,6 +741,8 @@ async def api_provision_sb(request: Request, sid: int, sess: dict = Depends(csrf
     for p in chosen:
         if not opts[p + "_port"]:
             return jerr(f"Некорректный порт {sb.NAMES[p]}")
+    if opts["stls"] and not sb.DOMAIN_RE.match(opts["stls_sni"]):
+        return jerr("Укажите домен для рукопожатия ShadowTLS (неброский сайт с TLS 1.3, не за Cloudflare)")
     if any(opts[p] for p in sb.REALITY_PROTOS) and not sb.DOMAIN_RE.match(opts["reality_sni"]):
         return jerr("Укажите домен для маскировки Reality (неброский сайт с TLS 1.3)")
     if (any(opts[p] for p in sb.TLS_PROTOS) or opts["masque"]) and not sb.DOMAIN_RE.match(opts["anytls_domain"]):
@@ -1546,7 +1549,7 @@ async def client_csrf_dep(request: Request, cs: dict = Depends(client_dep)) -> d
 
 
 def render_portal(request: Request, name: str, cs: dict | None, **ctx):
-    ctx.update(sess=None, client=cs, csrf=cs["csrf"] if cs else "",
+    ctx.update(sess=None, client=cs, csrf=cs["csrf"] if cs else "", portal=True,
                ok=(request.query_params.get("ok") or "")[:300], err=(request.query_params.get("err") or "")[:300])
     return page(request, name, ctx)
 
