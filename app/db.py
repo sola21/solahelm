@@ -213,6 +213,10 @@ def _migrate() -> None:
         ex("ALTER TABLE users ADD COLUMN template_id INTEGER")   # NULL = шаблон по умолчанию
     if "uuid" not in cols:
         ex("ALTER TABLE users ADD COLUMN uuid TEXT")
+    if "bw_down" not in cols:   # скорость клиента, Мбит/с, для Hysteria2 Brutal (0 — не передавать, работает BBR)
+        ex("ALTER TABLE users ADD COLUMN bw_down INTEGER DEFAULT 0")
+    if "bw_up" not in cols:
+        ex("ALTER TABLE users ADD COLUMN bw_up INTEGER DEFAULT 0")
     if "ss_key" not in cols:
         ex("ALTER TABLE users ADD COLUMN ss_key TEXT DEFAULT ''")      # ключ профиля для Shadowsocks-2022 (16 байт, base64)
     import base64, os

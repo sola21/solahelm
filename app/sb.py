@@ -452,6 +452,17 @@ def build_install_script(s: dict, cfg_text: str | None, opts: dict, mq_text: str
         L += [sh_echo(ok_msg),
               f"echo | timeout 15 openssl s_client -connect {sni}:443 -servername {sni} -tls1_3 >/dev/null 2>&1 || "
               f"{{ {sh_echo(bad_msg)}; exit 1; }}"]
+    # сайт для маскировки (Reality, ShadowTLS): предупреждения, если он без HTTP/2 или за Cloudflare — установку не прерывают
+    donors = [s["reality_sni"]] if any(opts.get(p) for p in REALITY_PROTOS) else []
+    if opts.get("stls") and s["stls_sni"] not in donors:
+        donors.append(s["stls_sni"])
+    for dom in donors:
+        qd = shlex.quote(dom)
+        L += [f"echo | timeout 15 openssl s_client -connect {qd}:443 -servername {qd} -alpn h2 2>/dev/null | grep -q 'ALPN protocol: h2' || "
+              + sh_echo(f"!! {dom} не отвечает по HTTP/2 — для маскировки лучше сайт с HTTP/2 (настоящие браузеры почти всегда договариваются о h2)"),
+              f"if curl -sI --max-time 10 https://{qd}/ 2>/dev/null | grep -qiE '^(server: *cloudflare|cf-ray:)'; then "
+              + sh_echo(f"!! {dom} за Cloudflare — IP такого сайта принадлежат Cloudflare, а не вашему хостеру; для маскировки лучше другой сайт")
+              + "; fi"]
     if opts.get("stls"):
         ssni = shlex.quote(s["stls_sni"])
         ok_msg = f"== Проверка, что {s['stls_sni']} подходит для ShadowTLS (TLS 1.3)"

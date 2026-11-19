@@ -382,6 +382,10 @@ echo "net=$(grep "$IF:" /proc/net/dev | sed 's/.*://' | awk '{print $1" "$9}')"
 echo "ipv6_off=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)"
 echo "ipv6_addrs=$(ip -6 addr show scope global 2>/dev/null | grep -c inet6)"
 echo "ipv6_cfg=$([ -f /etc/sysctl.d/99-solahelm-ipv6.conf ] && echo 1 || echo 0)"
+echo "tcp_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)"
+echo "qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null)"
+echo "rmem_max=$(sysctl -n net.core.rmem_max 2>/dev/null)"
+echo "tune_cfg=$([ -f /etc/sysctl.d/99-solahelm-net.conf ] && echo 1 || echo 0)"
 SB=__SBSVC__
 if [ -n "$SB" ]; then
   echo "sb_active=$(systemctl is-active $SB 2>/dev/null)"
@@ -455,6 +459,8 @@ def _poll_once(s: dict, prev: dict, now: int):
                       load=kv.get("load", ""), cpus=int(kv.get("cpus") or 0))
             st["uptime"] = int(float(kv.get("uptime") or 0))
             # IPv6: "" — в ядре нет поддержки; off=True — отключён sysctl'ом (нашим или чужим), addrs — глобальных адресов
+            st["net_tune"] = {"cc": kv.get("tcp_cc", ""), "qdisc": kv.get("qdisc", ""), "rmem": int(kv.get("rmem_max") or 0),
+                              "ours": kv.get("tune_cfg") == "1"}
             st["ipv6"] = {"supported": kv.get("ipv6_off", "") in ("0", "1"), "off": kv.get("ipv6_off") == "1",
                           "addrs": int(kv.get("ipv6_addrs") or 0), "ours": kv.get("ipv6_cfg") == "1"}
             mem, disk, net = _ints(kv.get("mem", "")), _ints(kv.get("disk", "")), _ints(kv.get("net", ""))

@@ -237,6 +237,52 @@ def set_ipv6(sid: int, disable: bool) -> dict:
     return {"disabled": out.strip() == "1"}
 
 
+NET_CONF = "/etc/sysctl.d/99-solahelm-net.conf"
+# BBR + fq — для TCP-протоколов (VLESS, Trojan, AnyTLS, ShadowTLS, Naive); 16 МБ буферов — для QUIC (Hysteria2, TUIC, MASQUE):
+# без них quic-go не может поднять размер буфера и пишет об этом в журнал, скорость упирается в ядро.
+NET_TUNE = """# Created by SolaHelm: network tuning for proxy protocols. Delete this file to return to the kernel defaults.
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+"""
+NET_DEFAULTS = "net.ipv4.tcp_congestion_control=cubic net.core.default_qdisc=fq_codel net.core.rmem_max=212992 net.core.wmem_max=212992"
+
+
+def set_net_tune(sid: int, on: bool) -> dict:
+    """Включить (on=True) или убрать сетевой тюнинг VPS. После изменения перезапускаются работающие прокси-службы,
+    чтобы новые буферы и BBR подхватились (клиенты переподключатся)."""
+    from . import sb
+    with server_lock(sid):
+        s = get_server(sid)
+        q = shlex.quote
+        services = " ".join(q(x) for x in (s["service"], s["sb_service"], sb.MASQUE_SVC))
+        restart = f"for S in {services}; do systemctl try-restart \"$S\" 2>/dev/null || true; done"
+        with Conn(s, timeout=20) as c:
+            if on:
+                code, out, err = c.run(
+                    f"mkdir -p /etc/sysctl.d && cat > {q(NET_CONF)} && chmod 644 {q(NET_CONF)} && "
+                    f"(modprobe tcp_bbr 2>/dev/null || true) && sysctl -p {q(NET_CONF)} >/dev/null && "
+                    f"[ \"$(sysctl -n net.ipv4.tcp_congestion_control)\" = bbr ] || "
+                    f"{{ rm -f {q(NET_CONF)}; sysctl -w {NET_DEFAULTS} >/dev/null 2>&1; exit 3; }}",
+                    input=NET_TUNE, timeout=60)
+                if code != 0:
+                    raise HyError("Не удалось включить BBR: ядро этого VPS его не поддерживает или менять sysctl запрещено "
+                                  "(так бывает на контейнерных VPS — OpenVZ, LXC). Настройка откачена. "
+                                  + (err or out).strip()[-200:])
+            else:
+                c.run(f"rm -f {q(NET_CONF)}; sysctl -w {NET_DEFAULTS} >/dev/null 2>&1; true", timeout=60)
+            c.run(restart, timeout=120)
+            code, out, _ = c.run("sysctl -n net.ipv4.tcp_congestion_control net.core.default_qdisc net.core.rmem_max", timeout=20)
+    from . import hy
+    try:
+        hy.poll_server(sid)
+    except Exception:
+        pass
+    vals = out.split()
+    return {"cc": vals[0] if vals else "?", "qdisc": vals[1] if len(vals) > 1 else "?"}
+
+
 def _reload_sshd() -> str:
     return "systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || service ssh reload"
 

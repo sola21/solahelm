@@ -194,6 +194,16 @@ def _dump(data, header: str = "") -> str:
     return header + buf.getvalue()
 
 
+def _bandwidth(user: dict) -> dict:
+    """Скорость клиента для Hysteria2 (Мбит/с). Если задана, клиент включает Brutal в этом направлении, иначе — BBR."""
+    out = {}
+    for k, col in (("up", "bw_up"), ("down", "bw_down")):
+        v = int(user.get(col) or 0)
+        if v > 0:
+            out[k] = v
+    return out
+
+
 def hysteria_yaml(user: dict, s: dict) -> str:
     e = endpoint(s)
     d: dict = {"server": f"{_fmt_host(e['host'])}:{e['hop'] or e['port']}",
@@ -207,6 +217,9 @@ def hysteria_yaml(user: dict, s: dict) -> str:
         d["tls"] = tls
     if e["obfs"]:
         d["obfs"] = {"type": "salamander", "salamander": {"password": e["obfs"]}}
+    bw = _bandwidth(user)
+    if bw:
+        d["bandwidth"] = {k: f"{v} mbps" for k, v in bw.items()}
     d["socks5"] = {"listen": "127.0.0.1:1080"}
     d["http"] = {"listen": "127.0.0.1:8080"}
     return _dump(d, f"# Hysteria2 client — {profile_name(user, s)}\n# Run: hysteria client -c {profile_name(user, s)}.yaml\n")
@@ -268,6 +281,7 @@ def clash_yaml(user: dict, servers: list[dict], template: dict | None = None) ->
             else:
                 e = endpoint(s)
                 p = {"type": "hysteria2", "server": e["host"], "port": e["port"],
+                     **{k: f"{v} Mbps" for k, v in _bandwidth(user).items()},
                      "password": f"{user['username']}:{user['password']}"}
                 if e["hop"]:
                     p["ports"] = e["hop"]
@@ -376,6 +390,7 @@ def singbox_outbound(user: dict, s: dict, proto: str, tag: str) -> dict | None:
     if proto == "hy2":
         e = endpoint(s)
         o = {"type": "hysteria2", "tag": tag, "server": e["host"], "server_port": e["port"],
+             **{f"{k}_mbps": v for k, v in _bandwidth(user).items()},
              "password": f"{user['username']}:{user['password']}",
              "tls": _sb_tls(e["sni"] or e["host"], e["insecure"], alpn=["h3"])}
         if e["hop"]:

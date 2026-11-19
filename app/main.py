@@ -912,6 +912,15 @@ async def api_guard_password(request: Request, sid: int, sess: dict = Depends(cs
     return jok(msg=msg)
 
 
+@r.post("/api/servers/{sid}/nettune")
+async def api_nettune(request: Request, sid: int, on: int = 1, sess: dict = Depends(csrf_dep)):
+    ok, res = await call(guard.set_net_tune, sid, bool(on))
+    audit(request, "server.nettune", f"id={sid} on={bool(on)} {'ok' if ok else res[:200]}")
+    if not ok:
+        return jerr(res)
+    return jok(msg=f"Сетевой тюнинг {'включён' if on else 'выключен'}: {res['cc']} / {res['qdisc']}. Прокси-службы перезапущены.")
+
+
 @r.post("/api/servers/{sid}/ipv6")
 async def api_ipv6(request: Request, sid: int, disable: int = 1, sess: dict = Depends(csrf_dep)):
     ok, res = await call(guard.set_ipv6, sid, bool(disable))
@@ -981,6 +990,11 @@ def parse_user_form(form, existing: dict | None) -> tuple[dict, list[int], list[
         d["traffic_limit"] = int(gb * 1024 ** 3) if gb > 0 else 0
     except ValueError:
         errs.append("Некорректный лимит трафика")
+    for col in ("bw_down", "bw_up"):
+        v = g(col)
+        d[col] = int(v) if v.isdigit() and int(v) <= 10000 else 0
+        if v and not (v.isdigit() and int(v) <= 10000):
+            errs.append("Скорость клиента: целое число Мбит/с от 0 до 10000")
     cid = g("client_id")
     d["client_id"] = int(cid) if cid.isdigit() and db.q1("SELECT 1 FROM clients WHERE id=?", (int(cid),)) else None
     tid = g("template_id")
@@ -1036,7 +1050,8 @@ async def user_new(request: Request, sess: dict = Depends(csrf_dep)):
         return render(request, "user_form.html", sess, **_user_form_ctx(None, dict(form), sids, errs))
     uid = hy.create_user(d["username"], d["password"], d["note"], enabled=d["enabled"],
                          expires_at=d["expires_at"], traffic_limit=d["traffic_limit"])
-    db.ex("UPDATE users SET client_id=?, template_id=? WHERE id=?", (d["client_id"], d["template_id"], uid))
+    db.ex("UPDATE users SET client_id=?, template_id=?, bw_down=?, bw_up=? WHERE id=?",
+          (d["client_id"], d["template_id"], d["bw_down"], d["bw_up"], uid))
     for sid in sids:
         db.ex("INSERT INTO user_servers(user_id,server_id) VALUES(?,?)", (uid, sid))
     db.ex("UPDATE users SET active=? WHERE id=?",

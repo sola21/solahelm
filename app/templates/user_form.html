@@ -22,6 +22,12 @@
     <label>Лимит трафика, ГБ<input name="limit_gb" value="{{ f.limit_gb or '' }}" placeholder="0 = без лимита" inputmode="decimal"></label>
   </div>
   <div class="row">
+    <label>Скорость клиента для Hysteria2, Мбит/с: загрузка (к клиенту)<input name="bw_down" value="{{ f.bw_down or '' }}" placeholder="пусто — автоматически (BBR)" inputmode="numeric"></label>
+    <label>Отдача (от клиента)<input name="bw_up" value="{{ f.bw_up or '' }}" placeholder="пусто — автоматически (BBR)" inputmode="numeric">
+      <small>Если указать, приложение клиента включит Brutal: держит заданную скорость даже на сетях с потерями (мобильный интернет).
+        Ставьте чуть ниже реальной скорости клиента: завышенное значение даёт потери и замедляет. Попадает в YAML, Clash и подписку sing-box.</small></label>
+  </div>
+  <div class="row">
     <label>Владелец (клиент личного кабинета)
       <select name="client_id">
         <option value="">— не назначен —</option>

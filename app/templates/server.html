@@ -160,6 +160,23 @@
   </div>
 </section>
 
+<section class="card" id="nettune">
+  <h3>Сетевой тюнинг</h3>
+  <p class="small muted">BBR и очередь <code>fq</code> ускоряют TCP-протоколы (VLESS, Trojan, AnyTLS, ShadowTLS, Naive), особенно на дальних и нестабильных каналах.
+    Увеличенные UDP-буферы (16 МБ) нужны QUIC-протоколам (Hysteria2, TUIC, MASQUE): без них скорость упирается в настройки ядра.
+    Настройка — файл <code>/etc/sysctl.d/99-solahelm-net.conf</code>, после изменения работающие прокси-службы перезапускаются (клиенты переподключатся).</p>
+  {% if st.net_tune and st.net_tune.cc %}
+  <dl class="kv">
+    <dt>Управление перегрузкой TCP</dt><dd>{% if st.net_tune.cc == 'bbr' %}<span class="badge ok">bbr</span>{% else %}<span class="badge warn">{{ st.net_tune.cc }}</span>{% endif %} · очередь {{ st.net_tune.qdisc or '?' }}</dd>
+    <dt>UDP-буфер (rmem_max)</dt><dd>{% if st.net_tune.rmem >= 16777216 %}<span class="badge ok">{{ st.net_tune.rmem|bytes }}</span>{% else %}<span class="badge warn">{{ st.net_tune.rmem|bytes }}</span>{% endif %}</dd>
+  </dl>
+  <div class="btns">
+    {% if st.net_tune.ours %}<button class="btn" data-api="/api/servers/{{ s.id }}/nettune?on=0" data-confirm="Убрать сетевой тюнинг на {{ s.name }} и вернуть настройки ядра по умолчанию? Прокси-службы перезапустятся." data-reload="1500">Убрать тюнинг</button>
+    {% else %}<button class="btn primary" data-api="/api/servers/{{ s.id }}/nettune?on=1" data-confirm="Включить BBR, fq и увеличенные UDP-буферы на {{ s.name }}? Прокси-службы перезапустятся, клиенты переподключатся." data-reload="1500">Включить тюнинг</button>{% endif %}
+  </div>
+  {% else %}<p class="muted small">Состояние появится после ближайшего опроса сервера.</p>{% endif %}
+</section>
+
 <section class="card" id="ipv6">
   <h3>IPv6</h3>
   <p class="small muted">Если у провайдера IPv6 работает плохо или вы его не используете, его можно отключить: исчезают обходные пути в обход прокси
