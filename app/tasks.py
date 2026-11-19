@@ -85,6 +85,7 @@ class Worker:
                 except Exception:
                     pass
             hy.enforce_limits()
+            hy.monthly_limit_reset()
             if time.time() - self.last_prune > 3600:
                 self.last_prune = time.time()
                 db.ex("DELETE FROM checks WHERE ts<?", (int(time.time()) - 35 * 86400,))

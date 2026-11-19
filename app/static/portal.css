@@ -1,34 +1,7 @@
 /* Кабинет клиента и его страница входа: тёмный «bento»-стиль с акцентным цветом.
-   Админка этот файл не подключает. Тема и акцент задаются portal.js (data-theme на <html>, --accent). */
+   Админка этот файл не подключает. Тема и акцент — theme.js и app.css. */
 
-html.portal, body.portal {
-  --bg: #0c0d0b; --bg-2: #121410; --tile: #151713; --tile-hi: #1b1e18;
-  --line: rgba(255,255,255,.07); --line-strong: rgba(255,255,255,.16);
-  --text: #f1f3ea; --muted: #959b8a; --faint: #5c6255;
-  --accent: #d7ff3c; --accent-ink: #0c0d0b; --ink-rgb: 12,13,11; --glow-alpha: .16;
-  --ok: #3ddc84; --warn: #ffb547; --err: #ff5d5d;
-  --panel: var(--tile); --panel2: var(--tile-hi); --accent2: var(--accent); --radius: 14px;
-}
-html.portal[data-theme="light"], html.portal[data-theme="light"] body.portal {
-  --bg: #f4f3ee; --bg-2: #ebeae3; --tile: #ffffff; --tile-hi: #fbfbf7;
-  --line: rgba(0,0,0,.08); --line-strong: rgba(0,0,0,.18);
-  --text: #141511; --muted: #5c6157; --faint: #9ea294;
-  --accent: #c4ef14; --accent-ink: #141511; --glow-alpha: .10;
-  --ok: #138a4b; --warn: #b26b00; --err: #c0261f;
-}
-@media (prefers-color-scheme: light) {
-  html.portal:not([data-theme="dark"]), html.portal:not([data-theme="dark"]) body.portal {
-    --bg: #f4f3ee; --bg-2: #ebeae3; --tile: #ffffff; --tile-hi: #fbfbf7;
-    --line: rgba(0,0,0,.08); --line-strong: rgba(0,0,0,.18);
-    --text: #141511; --muted: #5c6157; --faint: #9ea294;
-    --accent: #c4ef14; --accent-ink: #141511; --glow-alpha: .10;
-    --ok: #138a4b; --warn: #b26b00; --err: #c0261f;
-  }
-}
-/* свой акцент, выбранный на главном сайте (portal.js кладёт его в style у <html>) */
-html.portal[style*="--accent"] body.portal { --accent: inherit; --accent-ink: inherit; --ink-rgb: inherit; }
-
-html.portal { background: var(--bg); }
+/* цвета и тема — в app.css (:root, data-theme) */
 body.portal {
   background: var(--bg); color: var(--text); min-height: 100vh;
   font: 14.5px/1.5 'Onest', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -72,8 +45,6 @@ body.portal {
 .portal .lang a.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .p-who { font-size: 13px; color: var(--muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .theme-ico-light { display: none; }
-html.portal[data-theme="light"] .theme-ico-light { display: block; }
-html.portal[data-theme="light"] .theme-ico-dark { display: none; }
 
 /* ---------- плитки ---------- */
 .p-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(12px, 1.2vw, 18px); }
@@ -93,7 +64,13 @@ html.portal[data-theme="light"] .theme-ico-dark { display: none; }
 .p-hero .p-label { color: var(--accent-ink); opacity: .55; }
 .p-hero-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; opacity: .8; }
 .p-word { font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
-.p-hero h1 { font-weight: 800; font-size: clamp(40px, 6vw, 76px); line-height: .95; letter-spacing: -.05em; margin: 16px 0 10px; word-break: break-word; }
+.p-hero h1 { font-weight: 800; font-size: clamp(36px, 5.6vw, 72px); line-height: .95; letter-spacing: -.05em; margin: 16px 0 10px;
+  overflow-wrap: normal; word-break: normal; hyphens: manual; }
+/* на странице входа заголовок в узкой колонке: размер от ширины колонки, слово не рвётся */
+.p-login .p-hero { container-type: inline-size; }
+.p-login .p-hero h1 { font-size: clamp(34px, 12.5cqi, 72px); }
+/* имя профиля может быть длинным словом без пробелов — его переносить можно */
+.profile .p-hero h1 { overflow-wrap: anywhere; }
 .p-hero p { margin: 0; font-size: 16px; opacity: .75; }
 .p-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .p-pill { padding: 7px 12px; border-radius: 999px; font-size: 12.5px; display: inline-flex; align-items: center; gap: 8px;
@@ -208,3 +185,18 @@ html.portal[data-theme="light"] .theme-ico-dark { display: none; }
 .portal .copyline { align-items: center; }
 .portal .copyline .btn { flex: none; }
 @media (max-width: 860px) { .p-sub-qr { grid-template-columns: 1fr; } .p-sub-qr .qrwrap { justify-self: start; } }
+.portal h3, .portal .p-tile h3 { font-family: var(--sans); font-size: 17px; font-weight: 600; text-transform: none; letter-spacing: -.02em; color: var(--text); }
+
+/* состояние серверов на странице входа */
+.p-status { grid-column: 1 / -1; }
+.p-srv { padding: 10px 0; border-top: 1px solid var(--line); }
+.p-srv:first-of-type { border-top: 0; padding-top: 0; }
+.p-srv-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.p-srv-head b { font-weight: 600; }
+.p-srv-state { color: var(--muted); font-size: 13px; }
+.p-srv-up { margin-left: auto; color: var(--muted); font-size: 12px; }
+.p-state { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
+.p-state.up { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 15%, transparent); }
+.p-state.partial { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 15%, transparent); }
+.p-state.down { background: var(--err); box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 15%, transparent); }
+.p-srv .strip { height: 14px; margin: 8px 0 0; }

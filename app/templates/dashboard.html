@@ -9,11 +9,17 @@
   </div>
 </div>
 
+<div class="periods" role="group" aria-label="Период">
+  <span class="small muted">Трафик за период:</span>
+  {% for k, l in periods %}<a class="btn sm {{ 'primary' if period == k else 'ghost' }}" href="?period={{ k }}">{{ l }}</a>{% endfor %}
+</div>
+
 <div class="tiles">
   <div class="tile"><span>Серверы в работе</span><b>{{ stats.servers_up }}<small> / {{ stats.servers }}</small></b></div>
   <div class="tile"><span>Активные профили</span><b>{{ stats.users_active }}<small> / {{ stats.users }}</small></b></div>
   <div class="tile"><span>Подключений сейчас</span><b>{{ stats.online }}</b></div>
-  <div class="tile"><span>Трафик за всё время</span><b>{{ stats.traffic|bytes }}</b></div>
+  <div class="tile" title="Все протоколы: сумма по сетевым интерфейсам серверов"><span>Трафик серверов · {{ period_label|lower }}</span><b>{{ stats.server_traffic|bytes }}</b>
+    <small class="tile-sub">профили (Hysteria2): {{ stats.traffic|bytes }}{% if stats.server_since and period == 'all' %} · серверы считаются с {{ stats.server_since }}{% endif %}</small></div>
 </div>
 
 <h2>Серверы</h2>
@@ -33,6 +39,7 @@
       <dt>Аптайм</dt><dd>{{ st.uptime|dur if st.uptime else '—' }}</dd>
       <dt>Нагрузка</dt><dd>{{ st.load or '—' }}{% if st.cpus %} ({{ st.cpus }} CPU){% endif %}</dd>
       <dt>Сеть</dt><dd>{% if st.rate_rx is defined %}↓ {{ (st.rate_rx*8/1000000)|round(2) }} Мбит/с · ↑ {{ (st.rate_tx*8/1000000)|round(2) }} Мбит/с{% else %}—{% endif %}</dd>
+      <dt>Трафик</dt><dd>{{ s.traffic_period|bytes }} <span class="muted small">· {{ period_label|lower }}</span></dd>
     </dl>
     {% if st.mem_total %}<div class="small muted">RAM {{ st.mem_used|bytes }} / {{ st.mem_total|bytes }}</div>{{ bar(st.mem_used, st.mem_total) }}{% endif %}
     {% if st.disk_total %}<div class="small muted">Диск {{ st.disk_used|bytes }} / {{ st.disk_total|bytes }}</div>{{ bar(st.disk_used, st.disk_total) }}{% endif %}
@@ -43,11 +50,11 @@
 
 <div class="cols">
   <section>
-    <h2>Топ по трафику</h2>
+    <h2>Топ по трафику · {{ period_label|lower }}</h2>
     <table class="tbl">
-      <tr><th>Профиль</th><th class="r">Трафик</th><th class="r">Лимит</th></tr>
+      <tr><th>Профиль</th><th class="r">За период</th><th class="r">По лимиту</th></tr>
       {% for u in top %}
-      <tr><td><a href="{{ base }}/users/{{ u.id }}">{{ u.username }}</a></td><td class="r">{{ (u.tx+u.rx)|bytes }}</td><td class="r">{{ u.traffic_limit|bytes if u.traffic_limit else '∞' }}</td></tr>
+      <tr><td><a href="{{ base }}/users/{{ u.id }}">{{ u.username }}</a></td><td class="r">{{ u.period|bytes }}</td><td class="r">{{ u.used|bytes }} / {{ u.traffic_limit|bytes if u.traffic_limit else '∞' }}</td></tr>
       {% else %}<tr><td colspan="3" class="muted">Нет данных</td></tr>{% endfor %}
     </table>
   </section>

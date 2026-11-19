@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import clients, db, guard, hy, routing, sb, security, ssh
+from . import clients, db, guard, hy, routing, sb, security, snmp, ssh
 from .i18n import LANG_COOKIE, LANGS, detect_lang, get_lang, js_bundle, reset_lang, set_lang, tr, tr_html
 from .config import (ADMIN_BASE as ABASE, APP_DIR, BASE_PATH as BASE, BRAND, COOKIE_SECURE, DEFAULT_LANG, LEGACY_ADMIN_REDIRECT,
                      LEGACY_BASES, POLL_INTERVAL, PUBLIC_URL, SESSION_HOURS, TRUSTED_PROXIES)
@@ -310,24 +310,49 @@ def all_servers() -> list[dict]:
     return [server_view(s) for s in rows]
 
 
+PERIODS = [("day", "Сегодня"), ("7d", "7 дней"), ("30d", "30 дней"), ("month", "Этот месяц"), ("year", "Этот год"), ("all", "Всё время")]
+
+
+def period_start(key: str) -> str | None:
+    """Первый день периода (YYYY-MM-DD) для выборок из *_traffic_daily; None — за всё время."""
+    from datetime import date, timedelta
+    t = date.today()
+    starts = {"day": t, "7d": t - timedelta(days=6), "30d": t - timedelta(days=29), "month": t.replace(day=1),
+              "year": t.replace(month=1, day=1)}
+    return str(starts[key]) if key in starts else None
+
+
 @r.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, sess: dict = Depends(session_dep)):
     servers = all_servers()
     users = db.q("SELECT * FROM users")
+    period = request.query_params.get("period") or "month"
+    if period not in dict(PERIODS):
+        period = "month"
+    since = period_start(period) or "0000-00-00"
+    ut = db.q1("SELECT COALESCE(SUM(tx+rx),0) AS t FROM traffic_daily WHERE day>=?", (since,))["t"]
+    st_rows = {r["server_id"]: r["t"] for r in db.q(
+        "SELECT server_id, SUM(rx+tx) AS t FROM server_traffic_daily WHERE day>=? GROUP BY server_id", (since,))}
     stats = {
         "servers": len(servers),
         "servers_up": sum(1 for s in servers if s["st"].get("active") in ("active", "partial") and not s["st"]["down"]),
         "users": len(users),
         "users_active": sum(1 for u in users if user_state(u)[0] == "on"),
         "online": sum(s["st"].get("online_total", 0) for s in servers),
-        "traffic": sum(u["tx"] + u["rx"] for u in users),
+        "traffic": ut,
+        "server_traffic": sum(st_rows.values()),
+        "server_since": (db.q1("SELECT MIN(day) AS d FROM server_traffic_daily") or {}).get("d"),
     }
     for s in servers:
         s["hist"] = hy.history(s["id"], "24h")
-    top = sorted(users, key=lambda u: u["tx"] + u["rx"], reverse=True)[:8]
+        s["traffic_period"] = st_rows.get(s["id"], 0)
+    top = db.q("SELECT u.id, u.username, u.traffic_limit, u.tx+u.rx AS used, SUM(t.tx+t.rx) AS period "
+               "FROM traffic_daily t JOIN users u ON u.id=t.user_id WHERE t.day>=? "
+               "GROUP BY u.id ORDER BY period DESC LIMIT 8", (since,))
     jobs = db.q("SELECT j.*, s.name AS server_name FROM jobs j LEFT JOIN servers s ON s.id=j.server_id "
                 "ORDER BY j.id DESC LIMIT 5")
-    return render(request, "dashboard.html", sess, nav="dash", servers=servers, stats=stats, top=top, jobs=jobs)
+    return render(request, "dashboard.html", sess, nav="dash", servers=servers, stats=stats, top=top, jobs=jobs,
+                  periods=PERIODS, period=period, period_label=dict(PERIODS)[period])
 
 
 # ---------------- серверы ----------------
@@ -357,6 +382,7 @@ def parse_server_form(form, existing: dict | None) -> tuple[dict, list[str]]:
         "manage_stats": 1 if form.get("manage_stats") else 0,
         "hy2_enabled": 1 if form.get("hy2_enabled") else 0,
         "auto_assign": 1 if form.get("auto_assign") else 0,
+        "status_public": 1 if form.get("status_public") else 0, "public_name": g("public_name")[:60],
         "sb_service": g("sb_service") or "sing-box.service",
         "sb_config_path": g("sb_config_path") or "/etc/sing-box/config.json",
         "stats_port": _int(g("stats_port", "25413"), 1, 65535, 25413),
@@ -450,6 +476,7 @@ async def server_page(request: Request, sid: int, sess: dict = Depends(session_d
     linkable = [u for u in db.q("SELECT id, username, note FROM users ORDER BY username") if u["id"] not in linked]
     return render(request, "server.html", sess, nav="servers", s=s, users=users, jobs=jobs,
                   linkable=linkable, drift=_drift(s), guard=guard.cached(s),
+                  snmp_creds=snmp.creds(s) if s.get("snmp_enabled") else None,
                   hostkey_fp=ssh.host_key_fingerprint(s["host_key"]), pubkey=ssh.panel_pubkey(),
                   endpoint=clients.endpoint(s), hist=hy.history(sid, request.query_params.get("range", "24h")),
                   fail_threshold=hy.fail_threshold(), poll_interval=db.get_setting("poll_interval", POLL_INTERVAL),
@@ -813,6 +840,30 @@ async def api_remove_service(request: Request, sid: int, which: str = "hy", sess
         return jerr(str(e))
     audit(request, "server.remove_service", f"id={sid} {which}")
     jid = worker.run_job("remove", sid, lambda log: hy.remove_service(sid, which, log))
+    return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
+
+
+@r.post("/api/servers/{sid}/snmp")
+async def api_snmp(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    b = await request.json()
+    o = {"version": str(b.get("version") or "v3"), "user": str(b.get("user") or "librenms").strip(),
+         "auth_proto": str(b.get("auth_proto") or "SHA"), "priv_proto": "AES",
+         "allow": str(b.get("allow") or "").strip(), "location": str(b.get("location") or "").strip(),
+         "regen": bool(b.get("regen"))}
+    e = snmp.check_opts(o)
+    if e:
+        return jerr(e)
+    if not db.q1("SELECT 1 FROM servers WHERE id=?", (sid,)):
+        return jerr("Сервер не найден", 404)
+    audit(request, "server.snmp", f"id={sid} {o['version']} allow={o['allow'] or 'auto'}")
+    jid = worker.run_job("snmp", sid, lambda log: snmp.apply(sid, o, log))
+    return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
+
+
+@r.post("/api/servers/{sid}/snmp/remove")
+async def api_snmp_remove(request: Request, sid: int, sess: dict = Depends(csrf_dep)):
+    audit(request, "server.snmp.remove", f"id={sid}")
+    jid = worker.run_job("snmp remove", sid, lambda log: snmp.remove(sid, log))
     return jok(job=jid, url=f"{ABASE}/jobs/{jid}")
 
 
@@ -1220,7 +1271,10 @@ async def settings_page(request: Request, sess: dict = Depends(session_dep)):
     return render(request, "settings.html", sess, nav="settings", pubkey=ssh.panel_pubkey(), sessions=sessions,
                   public_url=db.get_setting("public_url") or "", env_public_url=PUBLIC_URL,
                   poll_interval=db.get_setting("poll_interval", POLL_INTERVAL), detected=public_base(request),
-                  fail_threshold=hy.fail_threshold(), admin_path=ABASE[len(BASE):])
+                  fail_threshold=hy.fail_threshold(), admin_path=ABASE[len(BASE):],
+                  limit_reset_day=int(db.get_setting("limit_reset_day", 0) or 0),
+                  status_public=int(db.get_setting("status_public", 0) or 0),
+                  status_title=db.get_setting("status_title", "") or "")
 
 
 @r.post("/settings/general")
@@ -1232,6 +1286,17 @@ async def settings_general(request: Request, sess: dict = Depends(csrf_dep)):
     db.set_setting("public_url", pu)
     db.set_setting("poll_interval", _int(form.get("poll_interval"), 15, 3600, POLL_INTERVAL))
     db.set_setting("fail_threshold", _int(form.get("fail_threshold"), 1, 20, hy.FAIL_THRESHOLD_DEFAULT))
+    old_day = int(db.get_setting("limit_reset_day", 0) or 0)
+    new_day = _int(form.get("limit_reset_day"), 0, 28, 0)
+    db.set_setting("limit_reset_day", new_day)
+    if new_day and new_day != old_day:
+        # новый день сброса начинает действовать со следующего месяца, если в этом он уже прошёл
+        from datetime import date
+        t = date.today()
+        if t.day >= new_day:
+            db.set_setting("limit_reset_last", t.strftime("%Y-%m"))
+    db.set_setting("status_public", 1 if form.get("status_public") else 0)
+    db.set_setting("status_title", str(form.get("status_title") or "").strip()[:80])
     audit(request, "settings.general", pu)
     return redirect("/settings", ok="Настройки сохранены")
 
@@ -1548,8 +1613,27 @@ async def client_csrf_dep(request: Request, cs: dict = Depends(client_dep)) -> d
     return cs
 
 
+def public_status() -> list[dict] | None:
+    """Состояние серверов для страницы входа в кабинет (если включено в настройках): имя, состояние, доступность за сутки.
+    Ничего технического (IP, домены, протоколы, нагрузка) сюда не попадает."""
+    if not int(db.get_setting("status_public", 0) or 0):
+        return None
+    out = []
+    for s in db.q("SELECT id, name, public_name, status FROM servers WHERE enabled=1 AND status_public=1 ORDER BY name"):
+        st = json.loads(s["status"] or "{}")
+        down = int(st.get("fails", 0)) >= hy.fail_threshold() or not st
+        act = st.get("active", "")
+        state = "down" if down or act not in ("active", "partial") else ("partial" if act == "partial" else "up")
+        h = hy.history(s["id"], "24h")
+        out.append({"name": s["public_name"] or s["name"], "state": state, "uptime": h["uptime"], "buckets": h["buckets"]})
+    return out
+
+
 def render_portal(request: Request, name: str, cs: dict | None, **ctx):
-    ctx.update(sess=None, client=cs, csrf=cs["csrf"] if cs else "", portal=True,
+    if name == "my_login.html":
+        ctx.setdefault("status_list", public_status())
+        ctx.setdefault("status_title", db.get_setting("status_title", "") or "")
+    ctx.update(sess=None, client=cs, csrf=cs["csrf"] if cs else "", is_portal=True,
                ok=(request.query_params.get("ok") or "")[:300], err=(request.query_params.get("err") or "")[:300])
     return page(request, name, ctx)
 

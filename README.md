@@ -19,6 +19,8 @@ Bilingual interface (**English / Русский**) with a language switch on eve
 
 ![Servers: Hysteria2 and sing-box protocols on each VPS](docs/screenshots/servers.en.png)
 
+![Client cabinet: profile, subscription with QR code and links](docs/screenshots/cabinet.en.png)
+
 *Demo data: IP addresses and host names are replaced with documentation examples.*
 
 ## Features
@@ -38,6 +40,10 @@ Bilingual interface (**English / Русский**) with a language switch on eve
   the profiles themselves (see "App API").
 - **Monitoring:** online users and traffic per profile / server / day (Hysteria2), availability history with charts,
   tolerant "no connection" detection (retries + N failures in a row).
+- **Traffic by period:** today / 7 days / 30 days / this month / this year / all time on the Overview, for profiles (Hysteria2) and for whole servers
+  (all protocols, counted on the network interface). Optional monthly reset of profile traffic limits on a chosen day.
+- **Public server status** on the cabinet sign-in page (optional): names you choose, up / down and 24-hour availability, nothing technical.
+- **SNMP for LibreNMS:** v3 (authPriv), v2c or v1 per VPS — the panel installs snmpd, generates the credentials and opens UDP 161 only for the monitoring host.
 - **Low profile:** random URL prefixes generated at install, every unknown path answers with a plain nginx-style 404,
   admin area isolated on its own prefix (and its own cookie path).
 - **Security:** scrypt password hashes, server-side sessions, CSRF tokens, login throttling, CSP, audit log,

@@ -10,7 +10,7 @@
     </div>
     <div class="p-pills">
       <span class="p-pill"><i class="p-dot up"></i>Hysteria2 · VLESS · TUIC</span>
-      <span class="p-pill">Android · iOS · Windows · macOS</span>
+      <span class="p-pill">Подписка · ссылки · QR</span>
     </div>
   </section>
 
@@ -22,5 +22,22 @@
     <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
     <button class="btn primary wide">Войти</button>
   </form>
+
+  {% if status_list %}
+  <section class="p-tile p-status" style="--i:2">
+    <p class="p-label">{{ status_title or 'Состояние серверов' }}</p>
+    {% for s in status_list %}
+    <div class="p-srv">
+      <div class="p-srv-head">
+        <i class="p-state {{ s.state }}"></i><b>{{ s.name }}</b>
+        <span class="p-srv-state">{{ {'up': 'работает', 'partial': 'работает частично', 'down': 'недоступен'}[s.state] }}</span>
+        <span class="p-srv-up mono">{{ (s.uptime|string ~ '%') if s.uptime is not none else '—' }}</span>
+      </div>
+      <div class="strip">{% for b in s.buckets %}<i class="st-{{ b.state }}"></i>{% endfor %}</div>
+    </div>
+    {% endfor %}
+    <p class="small muted">Доступность за последние 24 часа.</p>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

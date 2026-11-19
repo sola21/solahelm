@@ -84,6 +84,14 @@ CREATE TABLE IF NOT EXISTS traffic_daily(
     rx INTEGER DEFAULT 0,
     PRIMARY KEY(day, user_id, server_id)
 );
+-- трафик сервера по сетевому интерфейсу (все протоколы), по дням: приращение счётчиков /proc/net/dev
+CREATE TABLE IF NOT EXISTS server_traffic_daily(
+    day TEXT NOT NULL,
+    server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    rx INTEGER DEFAULT 0,
+    tx INTEGER DEFAULT 0,
+    PRIMARY KEY(day, server_id)
+);
 CREATE TABLE IF NOT EXISTS jobs(
     id INTEGER PRIMARY KEY,
     kind TEXT, server_id INTEGER, status TEXT,
@@ -167,6 +175,19 @@ SERVER_COLS = {
     "stls_enabled": "INTEGER DEFAULT 0",            # ShadowTLS v3 + внутренний Shadowsocks-2022
     "stls_port": "INTEGER DEFAULT 4443",
     "stls_sni": "TEXT DEFAULT 'www.lg.com'",          # сайт, с которым сервер делает настоящее рукопожатие TLS 1.3
+    "status_public": "INTEGER DEFAULT 0",            # показывать на странице входа в кабинет (если статус включён в настройках)
+    "public_name": "TEXT DEFAULT ''",               # имя сервера для страницы статуса (пусто — обычное имя)
+    # SNMP для внешнего мониторинга (LibreNMS): v3 — пользователь и пароли (зашифрованы), v2c/v1 — сообщество
+    "snmp_enabled": "INTEGER DEFAULT 0",
+    "snmp_version": "TEXT DEFAULT 'v3'",
+    "snmp_user": "TEXT DEFAULT 'librenms'",
+    "snmp_auth_proto": "TEXT DEFAULT 'SHA'",
+    "snmp_priv_proto": "TEXT DEFAULT 'AES'",
+    "snmp_auth": "TEXT DEFAULT ''",
+    "snmp_priv": "TEXT DEFAULT ''",
+    "snmp_community": "TEXT DEFAULT ''",
+    "snmp_allow": "TEXT DEFAULT ''",
+    "snmp_location": "TEXT DEFAULT ''",
     "naive_enabled": "INTEGER DEFAULT 0",
     "naive_port": "INTEGER DEFAULT 6443",
     "ss_enabled": "INTEGER DEFAULT 0",

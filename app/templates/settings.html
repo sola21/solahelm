@@ -14,6 +14,13 @@
       <label>Интервал опроса серверов, c<input name="poll_interval" type="number" min="15" max="3600" value="{{ poll_interval }}"></label>
       <label>Порог «нет связи»: неудачных опросов подряд<input name="fail_threshold" type="number" min="1" max="20" value="{{ fail_threshold }}">
         <small>Разовые сбои SSH не считаются. Перед ошибкой панель повторяет опрос сама. Больше значение — меньше ложных тревог.</small></label>
+      <label>Сброс лимитов трафика: число месяца (0 — не сбрасывать)<input name="limit_reset_day" type="number" min="0" max="28" value="{{ limit_reset_day }}">
+        <small>В этот день каждого месяца у всех профилей обнуляется «использовано по лимиту», заблокированные по лимиту снова включаются.
+          История трафика по дням не удаляется — её видно на «Обзоре» за любой период.</small></label>
+      <label class="check"><input type="checkbox" name="status_public" {{ 'checked' if status_public }}> Показывать состояние серверов на странице входа в кабинет</label>
+      <label>Заголовок блока статуса<input name="status_title" value="{{ status_title }}" placeholder="Состояние серверов" maxlength="80">
+        <small>Видно всем, кто откроет страницу входа, без логина: только имя сервера (можно задать своё в настройках сервера), «работает» / «недоступен» и доступность за сутки.
+          IP, домены и протоколы не показываются. Какие серверы показывать — галочка в настройках каждого сервера.</small></label>
       <button class="btn primary">Сохранить</button>
     </form>
   </section>

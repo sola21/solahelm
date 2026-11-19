@@ -532,6 +532,8 @@ def poll_server(sid: int) -> dict:
     else:
         final = dict(prev)
         final.update(ok=False, error=st.get("error", "")[:500], fails=int(prev.get("fails", 0)) + 1, checked=now)
+    if st["ok"]:
+        _store_server_traffic(sid, prev, st)
     db.ex("UPDATE servers SET status=?, last_check=? WHERE id=?", (json.dumps(final), now, sid))
     db.ex("INSERT INTO checks(server_id,ts,ok,ms,err) VALUES(?,?,?,?,?)",
           (sid, now, 1 if st["ok"] else 0, ms if st["ok"] else 0, first_error[:300]))
@@ -583,6 +585,43 @@ def _store_online(sid: int, online: dict, now: int) -> None:
         if uid and n:
             db.ex("UPDATE user_servers SET online=?, last_online=? WHERE user_id=? AND server_id=?", (n, now, uid, sid))
             db.ex("UPDATE users SET last_online=? WHERE id=?", (now, uid))
+
+
+def _store_server_traffic(sid: int, prev: dict, st: dict) -> None:
+    """Трафик сервера по интерфейсу за день: приращение счётчиков с прошлого опроса (после перезагрузки VPS счётчик начинается с нуля)."""
+    rx, tx = st.get("net_rx"), st.get("net_tx")
+    prx, ptx = prev.get("net_rx"), prev.get("net_tx")
+    if rx is None or tx is None or prx is None or ptx is None or prev.get("iface") != st.get("iface"):
+        return
+    drx = rx - prx if rx >= prx else rx
+    dtx = tx - ptx if tx >= ptx else tx
+    if drx <= 0 and dtx <= 0:
+        return
+    day = datetime.now().strftime("%Y-%m-%d")
+    db.ex("INSERT INTO server_traffic_daily(day,server_id,rx,tx) VALUES(?,?,?,?) "
+          "ON CONFLICT(day,server_id) DO UPDATE SET rx=rx+excluded.rx, tx=tx+excluded.tx", (day, sid, drx, dtx))
+
+
+def monthly_limit_reset() -> int:
+    """Ежемесячный сброс счётчиков лимитов профилей (настройка limit_reset_day: число месяца, 0 — выключено).
+    Сбрасывается только «использовано по лимиту»; история трафика по дням остаётся. Возвращает число сброшенных профилей."""
+    try:
+        day = int(db.get_setting("limit_reset_day", 0) or 0)
+    except (TypeError, ValueError):
+        day = 0
+    if not 1 <= day <= 28:
+        return 0
+    now = datetime.now()
+    month = now.strftime("%Y-%m")
+    if now.day < day or db.get_setting("limit_reset_last", "") == month:
+        return 0
+    rows = db.q("SELECT id FROM users WHERE tx>0 OR rx>0")
+    db.ex("UPDATE users SET tx=0, rx=0")
+    db.set_setting("limit_reset_last", month)
+    for r in rows:
+        refresh_user_active(r["id"])
+    db.audit("traffic.monthly_reset", f"профилей: {len(rows)}, день {day}", "system")
+    return len(rows)
 
 
 def _store_traffic(sid: int, traffic: dict) -> None:

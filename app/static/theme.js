@@ -1,9 +1,8 @@
-// Кабинет клиента: тема (тёмная/светлая) и акцентный цвет.
+// Тема (тёмная/светлая) и акцентный цвет для админки и кабинета клиента. Подключается в <head>, чтобы не было вспышки.
 // Ключи localStorage те же, что у главной страницы сайта (v2-theme, bred-accent): если панель живёт
-// на том же домене, кабинет выглядит так же, как сайт, а переключение темы здесь меняет её и там.
+// на том же домене, она выглядит так же, как сайт, а переключение темы здесь меняет её и там.
 (function () {
   var root = document.documentElement;
-  root.classList.add("portal");
   var store = {
     get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* приватный режим */ } }

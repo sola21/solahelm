@@ -297,6 +297,28 @@
     });
   }
 
+  // ---- мониторинг SNMP ----
+  const snmpF = $("#snmp-form");
+  if (snmpF) {
+    const sync = () => {
+      const v3 = snmpF.querySelector("[name=version]").value === "v3";
+      $$(".snmp-v3", snmpF).forEach((el) => (el.hidden = !v3));
+    };
+    snmpF.querySelector("[name=version]").addEventListener("change", sync);
+    sync();
+    snmpF.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!ask("Установить или перенастроить SNMP (snmpd) на сервере? Порт UDP 161 откроется только для адреса мониторинга.")) return;
+      const fd = new FormData(snmpF);
+      const body = { version: fd.get("version"), user: fd.get("user") || "", auth_proto: fd.get("auth_proto") || "SHA",
+        allow: fd.get("allow") || "", location: fd.get("location") || "", regen: fd.has("regen") };
+      busy(snmpF.querySelector("button[type=submit]"), async () => {
+        const d = await api(snmpF.dataset.url, { body });
+        if (d.ok) location.href = d.url; else out(d.error, true);
+      });
+    });
+  }
+
   // ---- защита SSH ----
   const gF2b = $("#guard-f2b");
   if (gF2b) {

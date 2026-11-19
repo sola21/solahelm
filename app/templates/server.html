@@ -179,6 +179,56 @@
   {% else %}<p class="muted small">Состояние появится после ближайшего опроса сервера.</p>{% endif %}
 </section>
 
+<section class="card" id="snmp">
+  <h3>Мониторинг SNMP</h3>
+  <p class="small muted">Для LibreNMS и других систем мониторинга: панель ставит <code>snmpd</code>, создаёт пользователя или сообщество
+    и открывает UDP 161 только для адреса мониторинга. Пароли генерирует панель — их нужно один раз ввести в LibreNMS при добавлении устройства.
+    Рекомендуется <b>v3</b> (шифрование и проверка подлинности); в v2c и v1 сообщество передаётся открытым текстом.</p>
+  {% if snmp_creds %}
+  {% set c = snmp_creds %}
+  <dl class="kv">
+    <dt>Состояние</dt><dd><span class="badge ok">настроен</span> SNMP {{ c.version }} · UDP 161{% if c.allow %} · доступ только с <span class="mono">{{ c.allow }}</span>{% else %} · доступ с адреса панели{% endif %}</dd>
+    <dt>Хост для LibreNMS</dt><dd class="mono">{{ s.host }}</dd>
+    {% if c.version == 'v3' %}
+    <dt>Уровень</dt><dd class="mono">authPriv</dd>
+    <dt>Пользователь</dt><dd class="mono">{{ c.user }}</dd>
+    <dt>Auth</dt><dd><span class="mono">{{ c.auth_proto }}</span> · <code class="secret" id="snmpA">{{ c.auth }}</code> <button class="btn sm" data-copy="#snmpA">Копировать</button></dd>
+    <dt>Crypto</dt><dd><span class="mono">{{ c.priv_proto }}</span> · <code class="secret" id="snmpP">{{ c.priv }}</code> <button class="btn sm" data-copy="#snmpP">Копировать</button></dd>
+    {% else %}
+    <dt>Сообщество</dt><dd><code class="secret" id="snmpC">{{ c.community }}</code> <button class="btn sm" data-copy="#snmpC">Копировать</button></dd>
+    {% endif %}
+  </dl>
+  <p class="small muted">В LibreNMS: Devices → Add Device, Hostname — адрес выше, SNMP Version — {{ c.version }}, порт 161, транспорт UDP{% if c.version == 'v3' %}, Auth Level — authPriv, остальное — из полей выше{% endif %}.</p>
+  {% endif %}
+  <form id="snmp-form" class="form mt" data-url="/api/servers/{{ s.id }}/snmp">
+    <fieldset>
+      <legend>{{ 'Перенастроить' if snmp_creds else 'Настроить' }} SNMP</legend>
+      <div class="row">
+        <label>Версия
+          <select name="version">
+            {% for v in ('v3', 'v2c', 'v1') %}<option value="{{ v }}" {{ 'selected' if (s.snmp_version or 'v3') == v }}>{{ v }}{{ ' (рекомендуется)' if v == 'v3' }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="snmp-v3">Пользователь<input name="user" value="{{ s.snmp_user or 'librenms' }}" maxlength="32"></label>
+        <label class="snmp-v3">Алгоритм Auth
+          <select name="auth_proto">{% for a in ('SHA', 'SHA-256', 'SHA-512') %}<option {{ 'selected' if (s.snmp_auth_proto or 'SHA') == a }}>{{ a }}</option>{% endfor %}</select>
+          <small>Crypto — AES</small>
+        </label>
+      </div>
+      <div class="row">
+        <label>Адрес мониторинга (IP или подсеть)<input name="allow" value="{{ s.snmp_allow or '' }}" placeholder="пусто — адрес, с которого подключается панель">
+          <small>Только с него будет открыт UDP 161. Если LibreNMS на той же машине, что и панель, оставьте пустым.</small></label>
+        <label>Местоположение (sysLocation)<input name="location" value="{{ s.snmp_location or s.name }}" maxlength="100"></label>
+      </div>
+      {% if snmp_creds %}<label class="check"><input type="checkbox" name="regen"> Сгенерировать новые пароли (потом их нужно будет обновить в LibreNMS)</label>{% endif %}
+      <div class="btns">
+        <button class="btn primary" type="submit">{{ 'Применить' if snmp_creds else 'Установить SNMP' }}</button>
+        {% if snmp_creds %}<button class="btn danger" type="button" data-job="/api/servers/{{ s.id }}/snmp/remove" data-confirm="Отключить SNMP на сервере {{ s.name }}? Служба snmpd будет остановлена, правило ufw для UDP 161 снято.">Отключить SNMP</button>{% endif %}
+      </div>
+    </fieldset>
+  </form>
+</section>
+
 <section class="card" id="guard">
   <h3>Защита SSH</h3>
   <p class="small muted">Боты круглосуточно подбирают пароли к SSH на любом VPS. Здесь можно поставить fail2ban (банит IP после нескольких неудачных

@@ -26,7 +26,7 @@
       {% if on and u.conns %}<span class="p-pill">Серверов: {{ u.conns|length }}</span>{% endif %}
     </div>
     {% if u.traffic_limit %}{{ bar(u.tx+u.rx, u.traffic_limit) }}{% endif %}
-    {% if not on %}<div class="flash warn mt">Профиль сейчас не активен ({{ u.state[1]|lower }}). Для продления обратитесь к администратору.</div>{% endif %}
+    {% if not on %}<div class="flash warn mt">Профиль сейчас не активен ({{ u.state[1] }}). Для продления обратитесь к администратору.</div>{% endif %}
   </section>
 
   {% if on %}
